@@ -7,5 +7,9 @@ services:
     restart: unless-stopped
     # 统计分析（可选，默认关闭）。每家一个独立变量，填了谁就启用谁，可同时启用多家：
     # environment:
+    #   API_BASE_URL: /api                                  # 平台 API 根路径
+    #   SSE_ENABLED: "true"                                # 是否启用 SSE 进度通道
+    #   APP_NAME: AIGC Studio                              # 站点名称
+    #   ICP_NUMBER: 京ICP备XXXXXXXX号                      # 备案号，可留空
     #   ANALYTICS_GA4_ID: G-XXXXXXXXXX                    # Google Analytics 4 衡量 ID
     #   ANALYTICS_BAIDU_ID: xxxxxxxxxxxxxxxxxxxxxxxxxxxx   # 百度统计站点 ID
