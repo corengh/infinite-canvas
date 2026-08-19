@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import { authResultFixture } from "@/platform/http/test/fixtures";
 import { server } from "@/platform/http/test/server";
 import { consumeCaptchaAttempt } from "@/pages/auth/components";
+import { queryClient } from "@/lib/query-client";
 import { loginRedirectTarget } from "@/pages/auth/login";
 import { ApiError } from "@/platform/http/errors";
 import { authApi } from "./api";
@@ -138,6 +139,17 @@ describe("FE-2 认证行为", () => {
 
         await expect(logoutCurrentSession()).rejects.toMatchObject({ status: 503 });
         expect(authStore.getState()).toMatchObject({ status: "authed", accessToken: "fresh-access-token" });
+    });
+
+    it("服务端登出成功后清除上一账号的查询缓存", async () => {
+        authStore.getState().authenticate(typedAuthResult, "13800138000");
+        queryClient.setQueryData(["wallet", typedAuthResult.user.id, "balance"], { available: 10_000 });
+        server.use(http.post("http://localhost/api/auth/logout", () => HttpResponse.json({ data: { logged_out: true } })));
+
+        await logoutCurrentSession();
+
+        expect(queryClient.getQueryCache().getAll()).toHaveLength(0);
+        expect(authStore.getState().status).toBe("anonymous");
     });
 
     it("守卫不在恢复期跳登录页，且登录后返回原始完整路由", () => {

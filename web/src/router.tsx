@@ -17,6 +17,9 @@ import ForgotPasswordPage from "@/pages/auth/forgot-password";
 import ResetPasswordPage from "@/pages/auth/reset-password";
 import AccountSettingsPage from "@/pages/settings/account";
 import SessionsPage from "@/pages/settings/sessions";
+import RechargePlaceholderPage from "@/pages/recharge";
+import TeamPage from "@/pages/team";
+import WalletPage from "@/pages/wallet";
 import { AuthGuard } from "@/platform/auth/guard";
 
 export const router = createBrowserRouter([
@@ -41,6 +44,10 @@ export const router = createBrowserRouter([
             { path: "/config", element: <ConfigPage /> },
             { path: "/settings/account", element: <AccountSettingsPage /> },
             { path: "/settings/sessions", element: <SessionsPage /> },
+            // [PLATFORM] FE-3 导航接缝：钱包与团队管理复用受保护业务布局。
+            { path: "/wallet", element: <WalletPage /> },
+            { path: "/recharge", element: <RechargePlaceholderPage /> },
+            { path: "/team", element: <TeamPage /> },
         ],
     },
     { path: "/login", element: <LoginPage /> },

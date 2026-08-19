@@ -1,6 +1,8 @@
 import { useStore } from "zustand";
 import { createStore } from "zustand/vanilla";
 
+import { clearSessionQueries } from "@/lib/query-client";
+
 const AUTH_SESSION_KEY = "aigc-studio:auth-session";
 
 export type AuthStatus = "unknown" | "authed" | "anonymous";
@@ -108,6 +110,7 @@ export const authStore = createStore<AuthState>()((set, get) => {
         sessionEpoch: 0,
         expiredSessionEpoch: null,
         authenticate: (result, loginId) => {
+            if (get().user?.id && get().user?.id !== result.user.id) clearSessionQueries();
             const normalizedLoginId = loginId?.trim().toLowerCase() ?? get().loginId ?? result.user.login_id;
             const expiresAt = Date.now() + Math.max(0, result.expires_in) * 1000;
             set((state) => ({
@@ -125,7 +128,10 @@ export const authStore = createStore<AuthState>()((set, get) => {
         startSession: (accessToken, expiresIn) => writeTokens(accessToken, expiresIn, true),
         setTokens: (accessToken, expiresIn) => writeTokens(accessToken, expiresIn, true),
         updateAccessToken: (accessToken, expiresIn) => writeTokens(accessToken, expiresIn, false),
-        setUser: (user) => set({ ...userState(user), status: "authed", rehydrateError: null }),
+        setUser: (user) => {
+            if (get().user?.id && get().user?.id !== user.id) clearSessionQueries();
+            set({ ...userState(user), status: "authed", rehydrateError: null });
+        },
         expireSession: (expectedEpoch) => {
             let expired = false;
             set((state) => {
@@ -151,6 +157,7 @@ export const authStore = createStore<AuthState>()((set, get) => {
                 expiredSessionEpoch: null,
             }));
             persistSession(null);
+            clearSessionQueries();
         },
         rehydrate: async (loadUser) => {
             set({ status: "unknown", rehydrateError: null });

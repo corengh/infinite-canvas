@@ -21,6 +21,7 @@ import { useAssetStore } from "@/stores/use-asset-store";
 import { useWorkbenchAgentStore } from "@/stores/use-workbench-agent-store";
 import type { ReferenceImage } from "@/types/image";
 import i18n from "@/i18n";
+import { creditBadgeEvents } from "@/platform/components/credit-badge";
 
 type GeneratedImage = {
     id: string;
@@ -170,6 +171,8 @@ export default function ImagePage() {
         }
 
         setElapsedMs(0);
+        // 提交前刷新可用积分；任务结束后再刷新结算结果。
+        creditBadgeEvents.refresh();
         setRunning(true);
         if (agentTaskId) updateAgentTask(agentTaskId, { status: "running", error: undefined });
         setPreviewLog(null);
@@ -210,6 +213,7 @@ export default function ImagePage() {
             successCount ? message.success(t("imageWorkbench.generated")) : message.error(failed?.reason instanceof Error ? failed.reason.message : t("workbench.generationFailed"));
         } finally {
             setRunning(false);
+            creditBadgeEvents.refresh();
         }
     };
 

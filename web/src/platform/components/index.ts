@@ -1,2 +1,1 @@
-// 平台级共享组件统一放在此目录，避免扩大上游基座文件的改动面。
-export {};
+export * from "./credit-badge";

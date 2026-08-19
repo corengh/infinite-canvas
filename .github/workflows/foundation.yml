@@ -35,7 +35,7 @@ jobs:
         run: bun run test:foundation
 
       - name: Test FE-1 HTTP client
-        run: bun run lint:http && bun run test:http && bun run test:auth
+        run: bun run lint:http && bun run test:http && bun run test:auth && bun run test:wallet-team
 
       - name: Build
         run: bun run build

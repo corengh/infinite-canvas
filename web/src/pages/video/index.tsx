@@ -23,6 +23,7 @@ import { useThemeStore } from "@/stores/use-theme-store";
 import type { ReferenceImage } from "@/types/image";
 import type { ReferenceAudio, ReferenceVideo } from "@/types/media";
 import i18n from "@/i18n";
+import { creditBadgeEvents } from "@/platform/components/credit-badge";
 
 type GeneratedVideo = {
     id: string;
@@ -204,6 +205,8 @@ export default function VideoPage() {
             return;
         }
         setElapsedMs(0);
+        // 视频异步任务提交前刷新，最终轮询完成后再刷新结算结果。
+        creditBadgeEvents.refresh();
         setRunning(true);
         if (agentTaskId) updateAgentTask(agentTaskId, { status: "running", error: undefined });
         setPreviewLog(null);
@@ -383,6 +386,7 @@ export default function VideoPage() {
             message.error(errorMessage);
         } finally {
             activeLogIdsRef.current.delete(log.id);
+            creditBadgeEvents.refresh();
             if (!activeLogIdsRef.current.size) {
                 setRunning(false);
                 setStartedAt(0);

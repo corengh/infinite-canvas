@@ -1,9 +1,10 @@
-import { App, Avatar, Badge, Button, Dropdown, Tooltip, type MenuProps } from "antd";
-import { Coins, LogOut, MonitorSmartphone, UserRound } from "lucide-react";
+import { App, Avatar, Button, Dropdown, type MenuProps } from "antd";
+import { LogOut, MonitorSmartphone, Users, UserRound, WalletCards } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 import { authApi } from "./api";
 import { authStore, useAuthStore } from "./store";
+import { CreditBadge } from "@/platform/components/credit-badge";
 
 export async function logoutCurrentSession(): Promise<void> {
     // 只有服务端确认注销并清除 HttpOnly Cookie 后，才允许删除前端登录态。
@@ -45,21 +46,17 @@ export function AuthUserActions() {
             disabled: true,
         },
         { type: "divider" },
+        { key: "wallet", icon: <WalletCards className="size-4" />, label: "钱包", onClick: () => navigate("/wallet") },
+        ...(user.role !== "member" ? [{ key: "team", icon: <Users className="size-4" />, label: "团队管理", onClick: () => navigate("/team") }] : []),
         { key: "account", icon: <UserRound className="size-4" />, label: "账号设置", onClick: () => navigate("/settings/account") },
         { key: "sessions", icon: <MonitorSmartphone className="size-4" />, label: "登录设备", onClick: () => navigate("/settings/sessions") },
         { key: "recovery", label: user.phone_verified ? "可通过手机号自助找回密码" : "忘记密码请联系管理员", disabled: true },
         { type: "divider" },
         { key: "logout", danger: true, icon: <LogOut className="size-4" />, label: "退出登录", onClick: () => void logout() },
     ];
-    const available = user.wallet?.available ?? 0;
-
     return (
         <div className="inline-flex items-center gap-2">
-            <Tooltip title={`可用积分 ${available}`}>
-                <Badge count={available} overflowCount={999999} showZero color="#57534e">
-                    <Button type="text" shape="circle" icon={<Coins className="size-4" />} aria-label={`可用积分 ${available}`} />
-                </Badge>
-            </Tooltip>
+            <CreditBadge />
             <Dropdown menu={{ items }} placement="bottomRight" trigger={["click"]}>
                 <Button type="text" shape="circle" aria-label="用户菜单">
                     <Avatar size={28} src={user.avatar_url}>
