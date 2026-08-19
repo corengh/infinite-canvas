@@ -34,5 +34,8 @@ jobs:
       - name: Test FE-0 foundation
         run: bun run test:foundation
 
+      - name: Test FE-1 HTTP client
+        run: bun run lint:http && bun run test:http
+
       - name: Build
         run: bun run build

@@ -7,6 +7,8 @@
         "dev": "vite --host 0.0.0.0 --port 3000",
         "build": "vite build",
         "typecheck": "tsc --noEmit",
+        "lint:http": "node scripts/check-http-contract.mjs",
+        "test:http": "vitest run src/platform/http",
         "test:foundation": "node scripts/check-foundation.mjs && sh scripts/test-runtime-config.sh",
         "start": "vite preview --host 0.0.0.0 --port 3000",
         "format": "prettier --write .",
@@ -52,8 +54,10 @@
         "@types/react": "19.1.12",
         "@types/react-dom": "19.1.9",
         "@vitejs/plugin-react": "^5.2.0",
+        "msw": "^2.15.0",
         "prettier": "^3.8.3",
         "typescript": "^5",
-        "vite": "^7.3.0"
+        "vite": "^7.3.0",
+        "vitest": "^4.1.11"
     }
 }

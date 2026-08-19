@@ -24,6 +24,7 @@
 - 前端使用 Vite、React、React Router、TypeScript、Ant Design、Tailwind、Zustand。
 - 编写 Ant Design 相关代码时，参考 https://ant.design/llms-full.txt 理解组件 API、示例和设计规范，并优先结合项目当前 antd 版本与既有写法。
 - 基座原有的非平台外部请求沿用 `web/src/services/api/`；AIGC Studio 平台能力统一放在 `web/src/platform/`，模型、支付、短信、资产等请求必须调用项目后端原生 API，禁止浏览器直连供应商或持有供应商密钥。
+- 平台 API 鉴权客户端只接受相对路径；登录、注册等公开端点必须显式使用 `auth: "public"`。服务端返回的签名资源 URL 使用不带平台凭据的普通 `fetch`，不得经鉴权客户端发送，避免 Bearer token 泄露到第三方域名。
 - 全局或跨页面状态优先放在 `web/src/stores/`。
 - 已经放在全局 store 或全局 hook 中的状态/动作，组件需要时直接使用对应 store/hook，不要为了“纯组件”层层透传 props；避免一个组件传递过多参数。
 - 全局组件、全局常量、全局配置等全局性质的内容不要作为 props 或参数层层传递；哪里需要就在哪里直接从对应全局入口获取。

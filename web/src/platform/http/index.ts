@@ -1,2 +1,8 @@
-// FE-1 将在此目录实现统一 HTTP 客户端、拦截器与 SSE 客户端。
+export { api, fetchWithAuth } from "./client";
+export { ApiError, apiErrorEvents, handleApiError, normalizeError } from "./errors";
+export { ensureFreshToken } from "./refresh-queue";
+export { subscribeTask } from "./sse";
+export type { ApiAuthMode, ApiRequestOptions } from "./client";
+export type { ErrorDisposition } from "./errors";
+export type { TaskDTO, TaskProgress, TaskSubscriptionHandlers } from "./sse";
 export {};
