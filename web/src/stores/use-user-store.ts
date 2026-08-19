@@ -1,18 +1,3 @@
-import { create } from "zustand";
-
-export type LocalUser = {
-    id: string;
-    username: string;
-    displayName: string;
-    avatarUrl: string;
-};
-
-type UserStore = {
-    user: LocalUser | null;
-    clearSession: () => void;
-};
-
-export const useUserStore = create<UserStore>()((set) => ({
-    user: null,
-    clearSession: () => set({ user: null }),
-}));
+// [PLATFORM] 接缝 #4：基座用户空壳整体替换为平台认证状态的再导出。
+export { authStore, useAuthStore as useUserStore } from "@/platform/auth/store";
+export type { AuthState as UserStore, TeamDTO, UserDTO } from "@/platform/auth/store";

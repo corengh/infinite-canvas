@@ -163,6 +163,18 @@ describe("平台 HTTP 客户端", () => {
         unsubscribe();
     });
 
+    it("refresh 服务暂时故障时保留凭据且不发布会话过期", async () => {
+        authStore.getState().setTokens("nearly-expired-token", 30);
+        const listener = vi.fn();
+        const unsubscribe = authEvents.on("session-expired", listener);
+        server.use(http.post("http://localhost/api/auth/refresh", () => HttpResponse.json({ error: { code: "UPSTREAM_ERROR", message: "服务暂时不可用" } }, { status: 503 })));
+
+        await expect(api.get("/protected")).rejects.toMatchObject({ status: 503 });
+        expect(authStore.getState()).toMatchObject({ accessToken: "nearly-expired-token", expiredSessionEpoch: null });
+        expect(listener).not.toHaveBeenCalled();
+        unsubscribe();
+    });
+
     it("刷新后仍是 401 时只重试一次", async () => {
         authStore.getState().setTokens("expired-token", 900);
         let requestCount = 0;

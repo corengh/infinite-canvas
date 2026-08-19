@@ -9,6 +9,7 @@
         "typecheck": "tsc --noEmit",
         "lint:http": "node scripts/check-http-contract.mjs",
         "test:http": "vitest run src/platform/http",
+        "test:auth": "vitest run src/platform/auth",
         "test:foundation": "node scripts/check-foundation.mjs && sh scripts/test-runtime-config.sh",
         "start": "vite preview --host 0.0.0.0 --port 3000",
         "format": "prettier --write .",

@@ -10,6 +10,7 @@ import { UserStatusActions } from "@/components/layout/user-status-actions";
 import { cn } from "@/lib/utils";
 import { useEffect, useRef, useState } from "react";
 import { useAgentStore } from "@/stores/use-agent-store";
+import { AuthUserActions } from "@/platform/auth/user-menu";
 
 export function AppTopNav() {
     const { t } = useTranslation();
@@ -87,6 +88,7 @@ export function AppTopNav() {
                                 <Button type="text" shape="circle" className="!h-8 !w-8 !min-w-8" icon={<Bot className="size-4" />} onClick={togglePanel} aria-label={t(panelOpen ? "topNav.closeAgent" : "topNav.openAgent")} />
                             </Tooltip>
                             <UserStatusActions />
+                            <AuthUserActions />
                         </div>
                     </div>
                 </header>

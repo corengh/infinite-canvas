@@ -1,10 +1,13 @@
 import { authStore } from "@/platform/auth/store";
+import type { UserDTO } from "@/platform/auth/store";
 
-import { rawRequest } from "./transport";
+import { normalizeError } from "./errors";
+import { HttpResponseError, rawRequest } from "./transport";
 
 type AuthResult = {
     access_token: string;
     expires_in: number;
+    user?: UserDTO;
 };
 
 type RefreshingRequest = {
@@ -34,11 +37,18 @@ export function ensureFreshToken(expectedEpoch = authStore.getState().sessionEpo
             if (!result || typeof result.access_token !== "string" || typeof result.expires_in !== "number") throw new TypeError("刷新响应不符合 AuthResult 契约");
             if (authStore.getState().sessionEpoch !== expectedEpoch) return null;
             authStore.getState().updateAccessToken(result.access_token, result.expires_in);
+            // 启动恢复期必须等 GET /me 完成后再结束 unknown，避免守卫提前放行。
+            if (result.user && authStore.getState().status !== "unknown") authStore.getState().setUser(result.user);
             return result.access_token;
-        } catch {
-            // 旧会话的迟到失败不得清除用户刚登录的新会话。
-            if (authStore.getState().sessionEpoch === expectedEpoch) authStore.getState().expireSession(expectedEpoch);
-            return null;
+        } catch (cause) {
+            // 旧会话的迟到失败不得清除或干扰用户刚登录的新会话。
+            if (authStore.getState().sessionEpoch !== expectedEpoch) return null;
+            if (cause instanceof HttpResponseError && cause.response.status === 401) {
+                authStore.getState().expireSession(expectedEpoch);
+                return null;
+            }
+            // 网络、超时与 5xx 不是凭据失效；向上抛出以便页面保留会话并提供重试。
+            throw normalizeError(cause);
         } finally {
             if (refreshing === request) refreshing = null;
         }
