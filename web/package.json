@@ -11,6 +11,7 @@
         "test:http": "vitest run src/platform/http",
         "test:auth": "vitest run src/platform/auth",
         "test:wallet-team": "vitest run src/platform/wallet-team",
+        "test:recharge": "vitest run src/platform/recharge",
         "test:foundation": "node scripts/check-foundation.mjs && sh scripts/test-runtime-config.sh",
         "start": "vite preview --host 0.0.0.0 --port 3000",
         "format": "prettier --write .",
