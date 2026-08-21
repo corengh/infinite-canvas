@@ -39,7 +39,7 @@ import { AssetPickerModal, type InsertAssetPayload } from "@/components/canvas/a
 import { CanvasSidePanel } from "@/components/canvas/canvas-side-panel";
 import { CanvasZoomControls } from "@/components/canvas/canvas-zoom-controls";
 import { useAgentStore } from "@/stores/use-agent-store";
-import { useCanvasStore } from "@/stores/canvas/use-canvas-store";
+import { useCanvasStore, type CanvasProject } from "@/stores/canvas/use-canvas-store";
 import { useAgentBridge } from "@/pages/canvas/hooks/use-agent-bridge";
 import { usePluginHost } from "@/pages/canvas/hooks/use-plugin-host";
 import { buildNodeMentionReferences, type CanvasResourceReference } from "@/lib/canvas/canvas-resource-references";
@@ -68,6 +68,9 @@ import { getNodeDefinition, isBuiltinNodeType as isBuiltinType, useNodeRegistryV
 import { registerBuiltinNodes } from "@/components/canvas/nodes/builtin-nodes";
 import { applyCanvasTaskProgress, applyCanvasTaskTerminal, capabilityForCanvas, canvasGenerationParams, confirmGeneration, finishCanvasTaskTracking, rememberGenerationApproval, type PlatformRequestOptions } from "@/platform/generation";
 import { cancelTask, getTask, isTerminalTask, trackTask } from "@/platform/api/generation";
+import { canvasLoader } from "@/platform/canvas/loader";
+import { canvasEvents } from "@/platform/canvas/events";
+import { CanvasSyncStatus } from "@/platform/canvas/sync-status";
 import { CanvasRefreshShell } from "@/components/canvas/canvas-refresh-shell";
 import { CanvasTopBar } from "@/components/canvas/canvas-top-bar";
 import { ConnectionCreateMenu, NodeCreateMenu, type PendingConnectionCreate } from "@/components/canvas/canvas-create-menus";
@@ -212,9 +215,7 @@ function InfiniteCanvasPage() {
     const cleanupAssetImages = useAssetStore((state) => state.cleanupImages);
     const hydrated = useCanvasStore((state) => state.hydrated);
     const createProject = useCanvasStore((state) => state.createProject);
-    const openProject = useCanvasStore((state) => state.openProject);
     const updateProject = useCanvasStore((state) => state.updateProject);
-    const renameProject = useCanvasStore((state) => state.renameProject);
     const deleteProjects = useCanvasStore((state) => state.deleteProjects);
     const currentProject = useCanvasStore((state) => state.projects.find((project) => project.id === projectId));
     const theme = canvasThemes[useThemeStore((state) => state.theme)];
@@ -452,15 +453,14 @@ function InfiniteCanvasPage() {
     useEffect(() => {
         if (!hydrated) return;
         setProjectLoaded(false);
-        const project = openProject(projectId);
-        if (!project) {
-            navigate("/canvas", { replace: true });
-            return;
-        }
-
+        let active = true;
+        const controller = new AbortController();
         const restore = async () => {
+            // [PLATFORM] 打开画布先加载服务端文档并附着同步版本，再恢复基座编辑状态。
+            const project = await canvasLoader.open(projectId, controller.signal);
             const restoredNodes = await hydrateCanvasImages(resetInterruptedGeneration(project.nodes));
             const restoredSessions = await hydrateAssistantImages(project.chatSessions || []);
+            if (!active) return;
             setNodes(restoredNodes);
             setConnections(project.connections);
             setChatSessions(restoredSessions);
@@ -484,8 +484,32 @@ function InfiniteCanvasPage() {
             setHistoryState({ canUndo: false, canRedo: false });
             setProjectLoaded(true);
         };
-        void restore();
-    }, [hydrated, navigate, openProject, projectId]);
+        void restore().catch((error) => {
+            if (!active) return;
+            message.error(error instanceof Error ? error.message : "画布加载失败");
+            navigate("/canvas", { replace: true });
+        });
+        return () => {
+            active = false;
+            controller.abort();
+        };
+    }, [hydrated, message, navigate, projectId]);
+
+    useEffect(
+        () =>
+            canvasEvents.on("remote-project-applied", (details) => {
+                if (details?.canvas_id !== projectId) return;
+                const project = details.project as CanvasProject | undefined;
+                if (!project) return;
+                // 冲突补偿必须进入页面正在渲染的状态，避免下一次本地更新反向删除远端变更。
+                setNodes(project.nodes);
+                setConnections(project.connections);
+                setBackgroundMode(project.backgroundMode);
+                setShowImageInfo(project.showImageInfo);
+                setViewport(project.viewport);
+            }),
+        [projectId],
+    );
 
     useEffect(() => {
         if (!projectLoaded) return;
@@ -1134,15 +1158,17 @@ function InfiniteCanvasPage() {
     }, [applyHistory]);
 
     const createAndOpenProject = useCallback(() => {
-        const id = createProject(t("canvas.defaultTitle", { count: useCanvasStore.getState().projects.length + 1 }));
-        navigate(`/canvas/${id}`);
-    }, [createProject, navigate, t]);
+        void createProject(t("canvas.defaultTitle", { count: useCanvasStore.getState().projects.length + 1 }))
+            .then((id) => navigate(`/canvas/${id}`))
+            .catch((error) => message.error(error instanceof Error ? error.message : "画布创建失败"));
+    }, [createProject, message, navigate, t]);
 
     const deleteCurrentProject = useCallback(() => {
-        deleteProjects([projectId]);
-        cleanupAssetImages();
-        navigate("/canvas");
-    }, [cleanupAssetImages, deleteProjects, navigate, projectId]);
+        void deleteProjects([projectId]).then(() => {
+            cleanupAssetImages();
+            navigate("/canvas");
+        }).catch((error) => message.error(error instanceof Error ? error.message : "画布删除失败"));
+    }, [cleanupAssetImages, deleteProjects, message, navigate, projectId]);
 
     const exportCurrentProject = useCallback(async () => {
         const project = useCanvasStore.getState().projects.find((item) => item.id === projectId);
@@ -2184,9 +2210,9 @@ function InfiniteCanvasPage() {
 
     const finishTitleEditing = useCallback(() => {
         const nextTitle = titleDraft.trim();
-        if (nextTitle) renameProject(projectId, nextTitle);
+        if (nextTitle) updateProject(projectId, { title: nextTitle });
         setTitleEditing(false);
-    }, [projectId, renameProject, titleDraft]);
+    }, [projectId, titleDraft, updateProject]);
 
     const preventCanvasContextMenu = useCallback((event: ReactMouseEvent) => {
         if ((event.target as HTMLElement).closest("[data-node-id]")) return;
@@ -2973,6 +2999,7 @@ function InfiniteCanvasPage() {
         <main className="flex h-full min-h-0 overflow-hidden" style={{ background: theme.canvas.background, color: theme.node.text }}>
             <CanvasSidePanel nodes={nodes} selectedNodeIds={selectedNodeIds} onFocusNode={focusNode} onPreviewNode={setPreviewNodeId} onInsertAsset={handleAssetInsert} />
             <section className="relative min-w-0 flex-1 overflow-hidden">
+                <CanvasSyncStatus />
                 <CanvasTopBar
                     title={currentProject?.title || t("canvas.projectPage.untitledCanvas")}
                     titleDraft={titleDraft}

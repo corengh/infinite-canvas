@@ -1,6 +1,6 @@
 import { Check, Download, Pencil, Trash2, X } from "lucide-react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { Button, Input } from "antd";
+import { App, Button, Input } from "antd";
 import { useTranslation } from "react-i18next";
 
 import { useCanvasStore, type CanvasProject } from "@/stores/canvas/use-canvas-store";
@@ -8,6 +8,7 @@ import { useCanvasUiStore } from "@/stores/canvas/use-canvas-ui-store";
 import { exportCanvasProjects } from "@/lib/canvas/canvas-export";
 
 export function CanvasProjectCard({ project }: { project: CanvasProject }) {
+    const { message } = App.useApp();
     const { i18n, t } = useTranslation();
     const navigate = useNavigate();
     const [searchParams] = useSearchParams();
@@ -24,8 +25,9 @@ export function CanvasProjectCard({ project }: { project: CanvasProject }) {
     const selected = selectedIds.includes(project.id);
     const open = () => navigate(`/canvas/${project.id}${searchParams.toString() ? `?${searchParams.toString()}` : ""}`);
     const saveTitle = () => {
-        renameProject(project.id, editingTitle);
-        stopEditing();
+        void renameProject(project.id, editingTitle)
+            .then(stopEditing)
+            .catch((error) => message.error(error instanceof Error ? error.message : "画布重命名失败"));
     };
 
     return (
@@ -51,9 +53,7 @@ export function CanvasProjectCard({ project }: { project: CanvasProject }) {
                         }}
                     >
                         <h2 className="truncate text-xl font-semibold">{project.title}</h2>
-                        <p className="mt-3 text-sm leading-6 text-stone-600 dark:text-stone-400">
-                            {t("canvas.project.stats", { nodes: project.nodes.length, connections: project.connections.length })}
-                        </p>
+                        <p className="mt-3 text-sm leading-6 text-stone-600 dark:text-stone-400">{t("canvas.project.stats", { nodes: project.nodeCount ?? project.nodes.length, connections: project.connections.length })}</p>
                     </button>
                 )}
             </div>

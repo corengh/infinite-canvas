@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { App, Button } from "antd";
 import { Download, FileUp, Plus } from "lucide-react";
@@ -13,6 +13,8 @@ import type { CanvasExportFile } from "@/types/canvas-export";
 import { useCanvasStore } from "@/stores/canvas/use-canvas-store";
 import { useCanvasUiStore } from "@/stores/canvas/use-canvas-ui-store";
 import { exportCanvasProjects } from "@/lib/canvas/canvas-export";
+import { canvasLoader } from "@/platform/canvas/loader";
+import { CanvasSyncStatus } from "@/platform/canvas/sync-status";
 
 export default function CanvasPage() {
     const { message } = App.useApp();
@@ -21,6 +23,7 @@ export default function CanvasPage() {
     const [searchParams] = useSearchParams();
     const inputRef = useRef<HTMLInputElement>(null);
     const autoOpenRef = useRef(false);
+    const [serverLoaded, setServerLoaded] = useState(false);
     const hydrated = useCanvasStore((state) => state.hydrated);
     const projects = useCanvasStore((state) => state.projects);
     const createProject = useCanvasStore((state) => state.createProject);
@@ -34,7 +37,13 @@ export default function CanvasPage() {
     const enterProject = (id: string) => {
         navigate(`/canvas/${id}${agentQuery}`);
     };
-    const createAndEnter = () => enterProject(createProject(t("canvas.defaultTitle", { count: projects.length + 1 })));
+    const createAndEnter = async () => {
+        try {
+            enterProject(await createProject(t("canvas.defaultTitle", { count: projects.length + 1 })));
+        } catch (error) {
+            message.error(error instanceof Error ? error.message : "画布创建失败");
+        }
+    };
     const importCanvas = async (file?: File) => {
         if (!file) return;
         try {
@@ -52,7 +61,7 @@ export default function CanvasPage() {
                     }),
                 ),
             );
-            data.projects.forEach((item) => importProject(item.project));
+            for (const item of data.projects) await importProject(item.project);
             message.success(t("canvas.imported", { count: data.projects.length }));
         } catch {
             message.error(t("canvas.importFailed"));
@@ -62,15 +71,36 @@ export default function CanvasPage() {
     };
 
     useEffect(() => {
-        if (!hydrated || autoOpenRef.current || (mode !== "new" && mode !== "recent")) return;
-        autoOpenRef.current = true;
-        enterProject(mode === "new" ? createProject(t("canvas.defaultTitle", { count: projects.length + 1 })) : projects[0]?.id || createProject(t("canvas.defaultTitle", { count: projects.length + 1 })));
-    }, [createProject, hydrated, mode, projects, t]);
+        if (!hydrated) return;
+        let active = true;
+        // [PLATFORM] 画布列表由服务端灌入，本地 projects 仅在断网时作为缓存显示。
+        void canvasLoader
+            .list()
+            .catch((error) => message.warning(error instanceof Error ? error.message : "画布列表加载失败，当前显示离线缓存"))
+            .finally(() => active && setServerLoaded(true));
+        return () => {
+            active = false;
+        };
+    }, [hydrated, message]);
 
-    if (hydrated && (mode === "new" || mode === "recent")) return <main className="flex h-full items-center justify-center bg-background text-sm text-stone-500">{t("canvas.opening")}</main>;
+    useEffect(() => {
+        if (!serverLoaded || autoOpenRef.current || (mode !== "new" && mode !== "recent")) return;
+        autoOpenRef.current = true;
+        void (async () => {
+            try {
+                const id = mode === "new" ? await createProject(t("canvas.defaultTitle", { count: projects.length + 1 })) : projects[0]?.id || (await createProject(t("canvas.defaultTitle", { count: projects.length + 1 })));
+                enterProject(id);
+            } catch (error) {
+                message.error(error instanceof Error ? error.message : "画布创建失败");
+            }
+        })();
+    }, [createProject, message, mode, projects, serverLoaded, t]);
+
+    if (!serverLoaded || mode === "new" || mode === "recent") return <main className="flex h-full items-center justify-center bg-background text-sm text-stone-500">{t("canvas.opening")}</main>;
 
     return (
         <main className="h-full overflow-auto bg-background text-stone-950 dark:text-stone-100">
+            <CanvasSyncStatus />
             <div className="mx-auto flex w-full max-w-6xl flex-col gap-8 px-6 py-10">
                 <header className="flex flex-wrap items-end justify-between gap-4 border-b border-stone-200 pb-6 dark:border-stone-800">
                     <div>
@@ -80,7 +110,16 @@ export default function CanvasPage() {
                     <div className="flex items-center gap-2">
                         {selectedIds.length ? (
                             <>
-                                <Button disabled={!hydrated} icon={<Download className="size-4" />} onClick={() => void exportCanvasProjects(projects.filter((project) => selectedIds.includes(project.id)), `${t("canvas.title")}-${selectedIds.length}`)}>
+                                <Button
+                                    disabled={!hydrated}
+                                    icon={<Download className="size-4" />}
+                                    onClick={() =>
+                                        void exportCanvasProjects(
+                                            projects.filter((project) => selectedIds.includes(project.id)),
+                                            `${t("canvas.title")}-${selectedIds.length}`,
+                                        )
+                                    }
+                                >
                                     {t("canvas.exportSelected")}
                                 </Button>
                                 <Button disabled={!hydrated} onClick={() => setDeleteIds(selectedIds)}>
@@ -96,13 +135,13 @@ export default function CanvasPage() {
                         <Button disabled={!hydrated} icon={<FileUp className="size-4" />} onClick={() => inputRef.current?.click()}>
                             {t("canvas.import")}
                         </Button>
-                        <Button disabled={!hydrated} type="primary" icon={<Plus className="size-4" />} onClick={createAndEnter}>
+                        <Button disabled={!serverLoaded} type="primary" icon={<Plus className="size-4" />} onClick={() => void createAndEnter()}>
                             {t("canvas.create")}
                         </Button>
                     </div>
                 </header>
 
-                {!hydrated ? (
+                {!serverLoaded ? (
                     <section className="flex min-h-[360px] items-center justify-center border-y border-stone-200 text-sm text-stone-500 dark:border-stone-800">{t("canvas.loading")}</section>
                 ) : projects.length ? (
                     <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
@@ -114,7 +153,7 @@ export default function CanvasPage() {
                     <section className="flex min-h-[360px] flex-col items-center justify-center border-y border-stone-200 text-center dark:border-stone-800">
                         <h2 className="text-xl font-medium">{t("canvas.empty")}</h2>
                         <p className="mt-3 text-sm text-stone-500">{t("canvas.emptyDescription")}</p>
-                        <Button type="primary" className="mt-6" icon={<Plus className="size-4" />} onClick={createAndEnter}>
+                        <Button type="primary" className="mt-6" icon={<Plus className="size-4" />} onClick={() => void createAndEnter()}>
                             {t("canvas.create")}
                         </Button>
                     </section>

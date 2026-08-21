@@ -1,10 +1,13 @@
 import { create } from "zustand";
-import { persist, type PersistStorage, type StorageValue } from "zustand/middleware";
+import { persist, type StorageValue } from "zustand/middleware";
 
-import { nanoid } from "nanoid";
 import i18n from "@/i18n";
-import { localForageStorage } from "@/lib/localforage-storage";
 import type { CanvasBackgroundMode } from "@/lib/canvas-theme";
+import { canvasApi } from "@/platform/api/canvas";
+import { canvasSessionId } from "@/platform/canvas/session";
+import { canvasSync } from "@/platform/canvas/sync-engine";
+import { createCanvasCacheStorage } from "@/platform/canvas/storage";
+import { ApiError } from "@/platform/http/errors";
 import type { CanvasAssistantSession, CanvasConnection, CanvasNodeData, ViewportTransform } from "@/types/canvas";
 
 export type CanvasProject = {
@@ -19,58 +22,37 @@ export type CanvasProject = {
     backgroundMode: CanvasBackgroundMode;
     showImageInfo: boolean;
     viewport: ViewportTransform;
+    nodeCount?: number;
 };
 
 type CanvasStore = {
     hydrated: boolean;
     projects: CanvasProject[];
-    createProject: (title?: string) => string;
-    importProject: (project: Partial<CanvasProject>) => string;
+    createProject: (title?: string) => Promise<string>;
+    importProject: (project: Partial<CanvasProject>) => Promise<string>;
     openProject: (id: string) => CanvasProject | null;
-    renameProject: (id: string, title: string) => void;
-    deleteProjects: (ids: string[]) => void;
+    renameProject: (id: string, title: string) => Promise<void>;
+    deleteProjects: (ids: string[]) => Promise<void>;
     replaceProjects: (projects: CanvasProject[]) => void;
-    updateProject: (id: string, patch: Partial<Pick<CanvasProject, "nodes" | "connections" | "chatSessions" | "activeChatId" | "backgroundMode" | "showImageInfo" | "viewport">>) => void;
+    replaceProject: (project: CanvasProject) => void;
+    updateProject: (id: string, patch: Partial<Pick<CanvasProject, "title" | "nodes" | "connections" | "chatSessions" | "activeChatId" | "backgroundMode" | "showImageInfo" | "viewport">>) => void;
 };
 
 const initialViewport: ViewportTransform = { x: 0, y: 0, k: 1 };
 const CANVAS_STORE_KEY = "infinite-canvas:canvas_store";
-type PersistedCanvasState = Pick<CanvasStore, "projects">;
-let saveTimer: ReturnType<typeof setTimeout> | null = null;
-let queuedPersistState: PersistedCanvasState | null = null;
-
-const canvasStorage: PersistStorage<CanvasStore> = {
-    getItem: async (name) => {
-        const value = await localForageStorage.getItem(name);
-        if (!value) return null;
-        const parsed = JSON.parse(value) as StorageValue<CanvasStore>;
-        queuedPersistState = parsed.state as PersistedCanvasState;
-        return parsed;
-    },
-    setItem: (name, value) => {
-        const nextState = value.state as PersistedCanvasState;
-        if (queuedPersistState && queuedPersistState.projects === nextState.projects) return;
-        queuedPersistState = nextState;
-        if (saveTimer) clearTimeout(saveTimer);
-        saveTimer = setTimeout(() => {
-            saveTimer = null;
-            void localForageStorage.setItem(name, JSON.stringify(value));
-        }, 400);
-    },
-    removeItem: (name) => localForageStorage.removeItem(name),
-};
+const canvasStorage = createCanvasCacheStorage<CanvasStore>();
 
 export const useCanvasStore = create<CanvasStore>()(
     persist(
         (set, get) => ({
             hydrated: false,
             projects: [],
-            createProject: (title = i18n.t("canvas.project.untitled")) => {
+            createProject: async (title = i18n.t("canvas.project.untitled")) => {
                 const now = new Date().toISOString();
-                const id = nanoid();
+                const created = await canvasApi.create(title);
                 const project: CanvasProject = {
-                    id,
-                    title,
+                    id: created.id,
+                    title: created.title,
                     createdAt: now,
                     updatedAt: now,
                     nodes: [],
@@ -82,13 +64,14 @@ export const useCanvasStore = create<CanvasStore>()(
                     viewport: initialViewport,
                 };
                 set((state) => ({ projects: [project, ...state.projects] }));
-                return id;
+                return created.id;
             },
-            importProject: (source) => {
+            importProject: async (source) => {
                 const now = new Date().toISOString();
+                const created = await canvasApi.create(source.title || i18n.t("canvas.project.imported"));
                 const project: CanvasProject = {
-                    id: nanoid(),
-                    title: source.title || i18n.t("canvas.project.imported"),
+                    id: created.id,
+                    title: created.title,
                     createdAt: source.createdAt || now,
                     updatedAt: now,
                     nodes: source.nodes || [],
@@ -100,25 +83,61 @@ export const useCanvasStore = create<CanvasStore>()(
                     viewport: source.viewport || initialViewport,
                 };
                 set((state) => ({ projects: [project, ...state.projects] }));
-                return project.id;
+                const empty = { ...project, nodes: [], connections: [], backgroundMode: "lines" as const, showImageInfo: false, viewport: initialViewport };
+                const lock = await canvasApi.acquireLock(project.id, canvasSessionId());
+                canvasSync.attach(project.id, created.version, { readonly: lock.mode !== "edit" });
+                canvasSync.onProjectPatched(project.id, empty, project);
+                await canvasSync.flushNow();
+                return created.id;
             },
             openProject: (id) => {
                 return get().projects.find((item) => item.id === id) || null;
             },
-            renameProject: (id, title) =>
+            renameProject: async (id, title) => {
+                const trimmed = title.trim();
+                const current = get().projects.find((project) => project.id === id);
+                if (!current || !trimmed || trimmed === current.title) return;
+                await canvasSync.flushNow();
+                if (await canvasSync.unsavedCount(id)) throw new Error("画布仍有未同步修改，请恢复网络后重试重命名");
+                const updated = await canvasApi.update(id, trimmed);
                 set((state) => ({
-                    projects: state.projects.map((project) => (project.id === id ? { ...project, title: title.trim() || project.title, updatedAt: new Date().toISOString() } : project)),
-                })),
-            deleteProjects: (ids) =>
-                set((state) => {
-                    const projects = state.projects.filter((project) => !ids.includes(project.id));
-                    return { projects };
-                }),
+                    projects: state.projects.map((project) => (project.id === id ? { ...project, title: updated.title, updatedAt: new Date().toISOString() } : project)),
+                }));
+            },
+            deleteProjects: async (ids) => {
+                const results = await Promise.allSettled(
+                    ids.map(async (id) => {
+                        try {
+                            await canvasApi.delete(id);
+                        } catch (error) {
+                            // 删除是幂等用户意图；目标已不存在时，本地也应完成清理。
+                            if (!(error instanceof ApiError) || (error.code !== "CANVAS_NOT_FOUND" && error.status !== 404)) throw error;
+                        }
+                        return id;
+                    }),
+                );
+                const deletedIds = results.flatMap((result) => (result.status === "fulfilled" ? [result.value] : []));
+                if (deletedIds.length) {
+                    await Promise.all(deletedIds.map((id) => canvasSync.discardCanvas(id)));
+                    set((state) => ({ projects: state.projects.filter((project) => !deletedIds.includes(project.id)) }));
+                }
+                const failed = results.length - deletedIds.length;
+                if (failed) throw new Error(`${ids.length} 个画布中 ${deletedIds.length} 个已删除，${failed} 个删除失败`);
+            },
             replaceProjects: (projects) => set({ projects }),
-            updateProject: (id, patch) =>
+            replaceProject: (project) =>
                 set((state) => ({
-                    projects: state.projects.map((project) => (project.id === id ? { ...project, ...patch, updatedAt: new Date().toISOString() } : project)),
+                    projects: state.projects.some((item) => item.id === project.id) ? state.projects.map((item) => (item.id === project.id ? project : item)) : [project, ...state.projects],
                 })),
+            updateProject: (id, patch) =>
+                set((state) => {
+                    const previous = state.projects.find((project) => project.id === id) ?? null;
+                    if (!previous) return state;
+                    const next = { ...previous, ...patch, nodeCount: patch.nodes?.length ?? previous.nodeCount, updatedAt: new Date().toISOString() };
+                    // [PLATFORM] 画布状态变更生成 op 并异步提交服务端（design C-1 / FE-7）。
+                    canvasSync.onProjectPatched(id, previous, next);
+                    return { projects: state.projects.map((project) => (project.id === id ? next : project)) };
+                }),
         }),
         {
             name: CANVAS_STORE_KEY,
