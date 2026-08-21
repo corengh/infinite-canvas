@@ -16,6 +16,27 @@ type Listener = (pending: PendingConfirmation | null) => void;
 const listeners = new Set<Listener>();
 const queue: PendingConfirmation[] = [];
 let active: PendingConfirmation | null = null;
+type Approval = { key: string; credits: number; remaining: number };
+const approvals: Approval[] = [];
+
+function approvalKey(input: GenerationEstimateInput): string {
+    // prompt 与模型足以隔离紧邻的画布操作；完整参数仍由提交前的服务端估价权威校验。
+    return JSON.stringify([input.capability, input.model_code, input.params.prompt ?? ""]);
+}
+
+export function rememberGenerationApproval(input: GenerationEstimateInput, estimate: GenerationEstimate): void {
+    const count = typeof input.params.count === "number" ? input.params.count : Number(input.params.count) || 1;
+    approvals.push({ key: approvalKey(input), credits: estimate.credits, remaining: Math.max(1, Math.floor(count)) });
+}
+
+function takeGenerationApproval(input: GenerationEstimateInput): Approval | undefined {
+    const index = approvals.findIndex((approval) => approval.key === approvalKey(input) && approval.remaining > 0);
+    if (index < 0) return undefined;
+    const approval = approvals[index];
+    approval.remaining -= 1;
+    if (approval.remaining === 0) approvals.splice(index, 1);
+    return approval;
+}
 
 function publish() {
     listeners.forEach((listener) => listener(active));
@@ -49,7 +70,10 @@ function isSilent(): boolean {
 }
 
 export async function confirmGeneration(input: GenerationEstimateInput, options: { force?: boolean } = {}): Promise<GenerationEstimate | null> {
+    const approval = takeGenerationApproval(input);
     const estimate = await estimateGeneration(input);
+    // 画布已对同一提示词的整批上限取得确认；单项价格未超过该上限时无需重复弹窗。
+    if (approval && estimate.credits <= approval.credits && !options.force) return estimate;
     // 高消耗确认永远不能被会话静默跳过；预估过期重试也必须强制再次展示。
     if (!shouldShowConfirmation(estimate, Boolean(options.force), isSilent())) return estimate;
     return new Promise((resolve) => enqueue({ input, estimate, resolve }));

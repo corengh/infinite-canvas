@@ -108,12 +108,13 @@ export function buildGenerationConfig(config: AiConfig, node: CanvasNodeData | u
         audioSpeed: node?.metadata?.audioSpeed || config.audioSpeed || defaultConfig.audioSpeed,
         audioInstructions: node?.metadata?.audioInstructions || config.audioInstructions || defaultConfig.audioInstructions,
         count: String(node?.metadata?.count || (mode === "image" ? config.canvasImageCount || config.count : config.count) || defaultConfig.count),
+        generationParams: node?.metadata?.generationParams,
     };
 }
 
 export function resetInterruptedGeneration(nodes: CanvasNodeData[]) {
     return nodes.map((node) =>
-        node.metadata?.status === "loading"
+        node.metadata?.status === "loading" && !node.metadata.taskId && !node.metadata.taskIds?.length
             ? {
                   ...node,
                   metadata: {

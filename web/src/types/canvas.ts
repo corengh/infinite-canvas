@@ -73,6 +73,14 @@ export type CanvasNodeMetadata = {
     durationMs?: number;
     groupId?: string;
     interactive?: boolean; // Plugin node interaction/move state; see CanvasNodeDefinition.interactionToggle.
+    taskId?: string;
+    taskIds?: string[];
+    generationTaskSlots?: Record<string, string>;
+    generationStatus?: "queued" | "running" | "cancelling" | "succeeded" | "failed" | "cancelled" | "timeout";
+    queuePosition?: number | null;
+    generationProgress?: number | null;
+    generationStage?: string | null;
+    creditsRefunded?: number | null;
 };
 
 export type CanvasNodeData = {

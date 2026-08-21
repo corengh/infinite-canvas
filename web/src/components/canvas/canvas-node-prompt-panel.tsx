@@ -32,6 +32,7 @@ export function CanvasNodePromptPanel({ node, isRunning, onPromptChange, onConfi
     const hasTextContent = node.type === CanvasNodeType.Text && Boolean(node.metadata?.content?.trim());
     const hasImageContent = node.type === CanvasNodeType.Image && Boolean(node.metadata?.content);
     const isEditingExistingContent = hasTextContent || hasImageContent;
+    const isCancelling = node.metadata?.generationStatus === "cancelling";
     const [prompt, setPrompt] = useState(node.metadata?.composerContent ?? node.metadata?.prompt ?? "");
     const [expanded, setExpanded] = useState(false);
     const [modelAvailable, setModelAvailable] = useState(mode !== "audio");
@@ -106,7 +107,7 @@ export function CanvasNodePromptPanel({ node, isRunning, onPromptChange, onConfi
                         type="primary"
                         className="!h-10 !min-w-16 shrink-0 !rounded-full !px-3"
                         danger={isRunning}
-                        disabled={!isRunning && !prompt.trim()}
+                        disabled={isCancelling || (!isRunning && !prompt.trim())}
                         onClick={() => (isRunning ? onStop(node.id) : submit())}
                         aria-label={t(isRunning ? "canvas.promptPanel.stopGeneration" : "canvas.promptPanel.generate")}
                     >
@@ -115,7 +116,7 @@ export function CanvasNodePromptPanel({ node, isRunning, onPromptChange, onConfi
                                 <>
                                     <LoaderCircle className="size-4 animate-spin" />
                                     <Square className="size-3.5 fill-current" />
-                                    <span className="text-xs font-medium">{t("canvas.promptPanel.stop")}</span>
+                                    <span className="text-xs font-medium">{isCancelling ? "取消中" : t("canvas.promptPanel.stop")}</span>
                                 </>
                             ) : (
                                 <ArrowUp className="size-4" />

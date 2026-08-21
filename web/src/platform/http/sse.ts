@@ -5,7 +5,7 @@ import { ApiError, normalizeError } from "./errors";
 
 const RECONNECT_DELAYS_MS = [1000, 2000, 4000] as const;
 const POLL_INTERVAL_MS = 3000;
-const TERMINAL_STATUSES = new Set(["succeeded", "failed", "cancelled", "canceled"]);
+const TERMINAL_STATUSES = new Set(["succeeded", "failed", "cancelled", "canceled", "timeout"]);
 
 export type TaskDTO = Record<string, unknown> & { status?: string };
 export type TaskProgress = Record<string, unknown> & { event: "queued" | "progress" };

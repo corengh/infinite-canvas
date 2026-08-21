@@ -3,6 +3,8 @@ import localforage from "localforage";
 import { nanoid } from "nanoid";
 import i18n from "@/i18n";
 import { readImageMeta } from "@/lib/image-utils";
+import { takeGeneratedOutput } from "@/platform/generation/legacy-adapter";
+import { getAssetUrl } from "@/platform/api/assets";
 
 export type UploadedImage = {
     url: string;
@@ -17,8 +19,16 @@ const store = localforage.createInstance({ name: "infinite-canvas", storeName: "
 const imageLogStore = localforage.createInstance({ name: "infinite-canvas", storeName: "image_generation_logs" });
 const videoLogStore = localforage.createInstance({ name: "infinite-canvas", storeName: "video_generation_logs" });
 const objectUrls = new Map<string, string>();
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export async function uploadImage(input: string | Blob): Promise<UploadedImage> {
+    if (typeof input === "string") {
+        const output = takeGeneratedOutput(input);
+        if (output) {
+            // 后端已持久化的产物保存 asset_id 与签名地址，不再重复写浏览器 IndexedDB。
+            return { url: input, storageKey: output.asset_id, width: output.width ?? 1024, height: output.height ?? 1024, bytes: 0, mimeType: output.mime_type || "image/png" };
+        }
+    }
     const blob = typeof input === "string" ? await (await fetch(input)).blob() : input;
     const storageKey = `image:${nanoid()}`;
     await store.setItem(storageKey, blob);
@@ -30,6 +40,7 @@ export async function uploadImage(input: string | Blob): Promise<UploadedImage> 
 
 export async function resolveImageUrl(storageKey?: string, fallback = "") {
     if (!storageKey) return fallback;
+    if (UUID_RE.test(storageKey)) return (await getAssetUrl(storageKey)).url;
     const cached = objectUrls.get(storageKey);
     if (cached) return cached;
     const blob = await store.getItem<Blob>(storageKey);

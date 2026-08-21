@@ -51,6 +51,8 @@ export type AiConfig = {
     background: string;
     count: string;
     canvasImageCount: string;
+    /** 平台模型目录产生的权威参数；旧字段仅作为尚未迁移界面的输入外壳。 */
+    generationParams?: Record<string, unknown>;
 };
 
 export type WebdavSyncConfig = {
@@ -182,8 +184,8 @@ export function resolveModelScript(config: AiConfig, value: string) {
 }
 
 function isAiConfigReady(config: AiConfig, model: string) {
-    const channel = resolveModelChannel(config, model);
-    return Boolean(model.trim() && channel.baseUrl.trim() && channel.apiKey.trim());
+    // [PLATFORM] 生成由后端渠道配置负责，浏览器只需确认已选择服务端模型。
+    return Boolean((model || config.model).trim());
 }
 
 export const useConfigStore = create<ConfigStore>()(

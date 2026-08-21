@@ -3,7 +3,8 @@ import { join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = resolve(fileURLToPath(new URL("..", import.meta.url)), "src");
-const allowed = new Set(["platform/api/generation.ts", "platform/generation/confirmed-submit.ts"]);
+// legacy-adapter 是三个基座 service 的唯一提交接缝，内部强制经 runConfirmedGeneration。
+const allowed = new Set(["platform/api/generation.ts", "platform/generation/confirmed-submit.ts", "platform/generation/legacy-adapter.ts"]);
 const failures = [];
 
 function visit(directory) {
@@ -12,7 +13,7 @@ function visit(directory) {
         if (statSync(path).isDirectory()) visit(path);
         else if (/\.[cm]?[jt]sx?$/.test(name)) {
             const local = relative(root, path).replaceAll("\\", "/");
-            if (!allowed.has(local) && /\bsubmitGeneration\s*\(/.test(readFileSync(path, "utf8"))) failures.push(local);
+            if (!local.endsWith(".test.ts") && !local.endsWith(".test.tsx") && !allowed.has(local) && /\bsubmitGeneration\s*\(/.test(readFileSync(path, "utf8"))) failures.push(local);
         }
     }
 }

@@ -22,6 +22,7 @@ import { useWorkbenchAgentStore } from "@/stores/use-workbench-agent-store";
 import type { ReferenceImage } from "@/types/image";
 import i18n from "@/i18n";
 import { creditBadgeEvents } from "@/platform/components/credit-badge";
+import { confirmGeneration, imageGenerationInput, rememberGenerationApproval } from "@/platform/generation";
 
 type GeneratedImage = {
     id: string;
@@ -167,6 +168,17 @@ export default function ImagePage() {
         const snapshot = buildRequestSnapshot();
         if (!snapshot) {
             if (agentTaskId) updateAgentTask(agentTaskId, { status: "failed", error: t("imageWorkbench.invalidParams") });
+            return;
+        }
+
+        try {
+            // 预估与随后每个生成槽复用同一套平台参数归一化，避免确认值和提交值分叉。
+            const input = await imageGenerationInput(snapshot.config, snapshot.text, generationCount, snapshot.references.length ? "image2image" : "text2image");
+            const estimate = await confirmGeneration(input);
+            if (!estimate) return;
+            rememberGenerationApproval(input, estimate);
+        } catch (error) {
+            message.error(error instanceof Error ? error.message : "暂时无法获取积分预估");
             return;
         }
 

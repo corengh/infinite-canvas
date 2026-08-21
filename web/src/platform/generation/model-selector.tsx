@@ -5,6 +5,9 @@ import { useEffect, useMemo } from "react";
 import { modelsApi, type JsonSchema, type ModelCapability, type ModelDTO } from "@/platform/api/models";
 import { authApi } from "@/platform/auth/api";
 import { authStore, useAuthStore } from "@/platform/auth/store";
+import { paramsForModel } from "./model-params";
+
+export { paramsForModel } from "./model-params";
 
 const HIDDEN_SCHEMA_FIELDS = new Set(["prompt", "reference_images", "reference_asset_ids"]);
 
@@ -31,11 +34,6 @@ export function schemaFields(schema: JsonSchema): SchemaField[] {
 
 export function shouldRenderGenerationEntry(capability: ModelCapability, modelCount: number): boolean {
     return capability !== "audio" || modelCount > 0;
-}
-
-export function paramsForModel(model: ModelDTO, current: Record<string, unknown>): Record<string, unknown> {
-    const allowed = new Set(Object.keys(model.params_schema.properties ?? {}));
-    return Object.fromEntries(Object.entries({ ...model.defaults, ...current }).filter(([key, value]) => allowed.has(key) && value !== undefined));
 }
 
 export function historicalUnavailableModel(model: ModelDTO | undefined): ModelDTO | undefined {

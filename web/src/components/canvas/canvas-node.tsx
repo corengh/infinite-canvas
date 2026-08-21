@@ -439,7 +439,7 @@ export const CanvasNode = React.memo(function CanvasNode({
 function NodeContent(props: NodeContentRendererProps) {
     if (props.node.type === CanvasNodeType.Config && props.renderNodeContent) return props.renderNodeContent(props.node);
     if (props.isBatchRoot) return <ImageNodeContent {...props} />;
-    if (props.node.metadata?.status === "loading") return <LoadingContent theme={props.theme} />;
+    if (props.node.metadata?.status === "loading") return <LoadingContent node={props.node} theme={props.theme} />;
     if (props.node.metadata?.status === "error") return <ErrorContent node={props.node} theme={props.theme} onRetry={props.onRetry} />;
 
     const Renderer = nodeContentRenderers[props.node.type as CanvasNodeType];
@@ -481,12 +481,22 @@ function GroupNodeContent({ node, theme, groupChildCount }: NodeContentRendererP
     );
 }
 
-function LoadingContent({ theme }: Pick<NodeContentRendererProps, "theme">) {
+function LoadingContent({ node, theme }: Pick<NodeContentRendererProps, "node" | "theme">) {
     const { t } = useTranslation();
+    const status = node.metadata?.generationStatus;
+    const progress = node.metadata?.generationProgress;
+    const label =
+        status === "cancelling"
+            ? "取消中…"
+            : status === "queued"
+              ? `排队中${node.metadata?.queuePosition ? ` · 前方 ${node.metadata.queuePosition} 个任务` : ""}`
+              : typeof progress === "number"
+                ? `生成中 · ${Math.round(progress * 100)}%`
+                : t("canvas.node.generating");
     return (
-        <div className="flex h-full w-full flex-col items-center justify-center gap-3" style={{ color: theme.node.activeStroke }}>
+        <div className="flex h-full w-full animate-[pulse_2s_ease-in-out_infinite] flex-col items-center justify-center gap-3 bg-gradient-to-br from-transparent via-blue-500/10 to-transparent" style={{ color: theme.node.activeStroke }}>
             <div className="size-10 animate-spin rounded-full border-2" style={{ borderColor: theme.node.stroke, borderTopColor: theme.node.activeStroke }} />
-            <span className="text-[10px] tracking-[0.2em]">{t("canvas.node.generating")}</span>
+            <span className="text-[10px] tracking-[0.12em]">{label}</span>
         </div>
     );
 }
@@ -496,6 +506,7 @@ function ErrorContent({ node, theme, onRetry }: Pick<NodeContentRendererProps, "
     return (
         <div className="flex max-w-[260px] flex-col items-center gap-3 px-5 text-center">
             <div className="text-xs leading-5 text-red-300">{node.metadata?.errorDetails || t("canvas.node.failed")}</div>
+            {node.metadata?.generationStatus && node.metadata.generationStatus !== "succeeded" ? <div className="text-xs font-medium" style={{ color: theme.node.activeStroke }}>积分已退还</div> : null}
             <button
                 type="button"
                 className="inline-flex h-8 items-center gap-1.5 rounded-full border px-3 text-xs font-medium transition hover:scale-[1.02]"

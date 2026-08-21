@@ -106,6 +106,14 @@ describe("FE-5 模型选择与预估确认", () => {
         expect(paramsForModel(changed, { quality: "high" })).toEqual({ quality: "high", camera_fixed: false });
     });
 
+    it("旧界面值超出模型 schema 时使用后端默认值", () => {
+        const changed = model({
+            params_schema: { type: "object", properties: { quality: { enum: ["low", "medium", "high"] }, size: { enum: ["1024x1024"] } } },
+            defaults: { quality: "medium", size: "1024x1024" },
+        });
+        expect(paramsForModel(changed, { quality: "auto", size: "1:1" })).toEqual({ quality: "medium", size: "1024x1024" });
+    });
+
     it("能力不匹配的上架模型不会被误报为历史下架模型", () => {
         expect(historicalUnavailableModel(model({ enabled: true }))).toBeUndefined();
         expect(historicalUnavailableModel(model({ enabled: false }))?.code).toBe("image-model");

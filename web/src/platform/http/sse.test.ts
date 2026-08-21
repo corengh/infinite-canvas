@@ -79,6 +79,18 @@ describe("生成任务 SSE 订阅", () => {
         unsubscribe();
     });
 
+    it("轮询读到 timeout 时按终态结束订阅", async () => {
+        authStore.getState().setTokens("access-token", 900);
+        server.use(
+            http.get("http://localhost/api/generation/task-timeout/stream", () => HttpResponse.error()),
+            http.get("http://localhost/api/generation/task-timeout", () => HttpResponse.json({ data: { ...completedTaskFixture, status: "timeout" } })),
+        );
+        const onDone = vi.fn();
+        const unsubscribe = subscribeTask("task-timeout", { onProgress: vi.fn(), onDone, onError: vi.fn() }, { reconnectDelaysMs: [1, 1, 1], pollIntervalMs: 1 });
+        await vi.waitFor(() => expect(onDone).toHaveBeenCalledWith(expect.objectContaining({ status: "timeout" })));
+        unsubscribe();
+    });
+
     it("取消订阅会 abort，且不再触发 handler", async () => {
         authStore.getState().setTokens("access-token", 900);
         server.use(http.get("http://localhost/api/generation/task-3/stream", () => openSseResponse('id: 1\nevent: progress\ndata: {"progress":0.1}\n\n')));

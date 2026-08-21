@@ -27,6 +27,7 @@ export function CanvasConfigNodePanel({ node, isRunning, inputSummary, onConfigC
     const hasAnyInput = Boolean(inputSummary.textCount || inputSummary.imageCount || inputSummary.videoCount || inputSummary.audioCount);
     const hasComposerContent = Boolean((node.metadata?.composerContent ?? node.metadata?.prompt ?? "").trim());
     const canGenerate = hasComposerContent || hasAnyInput;
+    const isCancelling = node.metadata?.generationStatus === "cancelling";
 
     return (
         <div className="flex h-full w-full cursor-move flex-col px-3 pb-3 pt-7 text-sm" style={{ color: theme.node.text }} onWheel={(event) => event.stopPropagation()}>
@@ -90,7 +91,7 @@ export function CanvasConfigNodePanel({ node, isRunning, inputSummary, onConfigC
                 type="primary"
                 className="mt-auto !h-9 !w-full !cursor-pointer !rounded-lg"
                 danger={isRunning}
-                disabled={!isRunning && !canGenerate}
+                disabled={isCancelling || (!isRunning && !canGenerate)}
                 onMouseDown={(event) => event.stopPropagation()}
                 onClick={() => (isRunning ? onStop(node.id) : onGenerate(node.id))}
             >
@@ -99,7 +100,7 @@ export function CanvasConfigNodePanel({ node, isRunning, inputSummary, onConfigC
                         <>
                             <LoaderCircle className="size-4 animate-spin" />
                             <Square className="size-3.5 fill-current" />
-                            <span>{t("canvas.configNode.stop")}</span>
+                            <span>{isCancelling ? "取消中" : t("canvas.configNode.stop")}</span>
                         </>
                     ) : (
                         <>
