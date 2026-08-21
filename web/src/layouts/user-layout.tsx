@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { AgentPanel } from "@/components/agent/agent-panel";
 import { AppTopNav } from "@/components/layout/app-top-nav";
 import { ReloginOverlay } from "@/platform/auth/relogin-overlay";
+import { GenerationConfirmHost } from "@/platform/generation";
 
 export default function UserLayout({ children }: { children: ReactNode }) {
     return (
@@ -13,6 +14,7 @@ export default function UserLayout({ children }: { children: ReactNode }) {
             </div>
             <AgentPanel />
             <ReloginOverlay />
+            <GenerationConfirmHost />
         </div>
     );
 }
