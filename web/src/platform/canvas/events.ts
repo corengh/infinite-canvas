@@ -1,4 +1,4 @@
-export type CanvasEvent = "lock-lost" | "remote-project-applied" | "canvas-deleted";
+export type CanvasEvent = "lock-lost" | "readonly-edit-blocked" | "remote-project-applied" | "canvas-deleted";
 
 type CanvasEventDetails = Record<string, unknown> | undefined;
 type CanvasEventListener = (details: CanvasEventDetails) => void;

@@ -23,9 +23,10 @@ type CanvasNodePromptPanelProps = {
     mentionReferences?: CanvasResourceReference[];
     onImageSettingsOpenChange?: (open: boolean) => void;
     modeOverride?: CanvasNodeGenerationMode; // Plugin nodes set their generation type through useBuiltinPanel.mode.
+    readonly?: boolean;
 };
 
-export function CanvasNodePromptPanel({ node, isRunning, onPromptChange, onConfigChange, onGenerate, onStop, mentionReferences = [], modeOverride }: CanvasNodePromptPanelProps) {
+export function CanvasNodePromptPanel({ node, isRunning, onPromptChange, onConfigChange, onGenerate, onStop, mentionReferences = [], modeOverride, readonly = false }: CanvasNodePromptPanelProps) {
     const { t } = useTranslation();
     const theme = canvasThemes[useThemeStore((state) => state.theme)];
     const mode = modeOverride ?? defaultMode(node.type);
@@ -102,7 +103,7 @@ export function CanvasNodePromptPanel({ node, isRunning, onPromptChange, onConfi
                     </Tooltip>
                     <CanvasPromptLibrary onSelect={updatePrompt} />
                 </div>
-                {modelAvailable ? (
+                {modelAvailable && (isRunning || !readonly) ? (
                     <Button
                         type="primary"
                         className="!h-10 !min-w-16 shrink-0 !rounded-full !px-3"

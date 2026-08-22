@@ -16,9 +16,10 @@ type CanvasConfigNodePanelProps = {
     onGenerate: (nodeId: string) => void;
     onStop: (nodeId: string) => void;
     onComposerToggle: () => void;
+    readonly?: boolean;
 };
 
-export function CanvasConfigNodePanel({ node, isRunning, inputSummary, onConfigChange, onGenerate, onStop, onComposerToggle }: CanvasConfigNodePanelProps) {
+export function CanvasConfigNodePanel({ node, isRunning, inputSummary, onConfigChange, onGenerate, onStop, onComposerToggle, readonly = false }: CanvasConfigNodePanelProps) {
     const { t } = useTranslation();
     const theme = canvasThemes[useThemeStore((state) => state.theme)];
     const storedMode = node.metadata?.generationMode || "image";
@@ -87,29 +88,31 @@ export function CanvasConfigNodePanel({ node, isRunning, inputSummary, onConfigC
                 <CanvasGenerationControls node={node} mode={mode} prompt={node.metadata?.composerContent ?? node.metadata?.prompt ?? ""} hasImageReference={inputSummary.imageCount > 0} onChange={(patch) => onConfigChange(node.id, patch)} />
             </div>
 
-            <Button
-                type="primary"
-                className="mt-auto !h-9 !w-full !cursor-pointer !rounded-lg"
-                danger={isRunning}
-                disabled={isCancelling || (!isRunning && !canGenerate)}
-                onMouseDown={(event) => event.stopPropagation()}
-                onClick={() => (isRunning ? onStop(node.id) : onGenerate(node.id))}
-            >
-                <span className="inline-flex items-center gap-1.5">
-                    {isRunning ? (
-                        <>
-                            <LoaderCircle className="size-4 animate-spin" />
-                            <Square className="size-3.5 fill-current" />
-                            <span>{isCancelling ? "取消中" : t("canvas.configNode.stop")}</span>
-                        </>
-                    ) : (
-                        <>
-                            <Play className="size-4" />
-                            <span>{t("canvas.configNode.generate")}</span>
-                        </>
-                    )}
-                </span>
-            </Button>
+            {isRunning || !readonly ? (
+                <Button
+                    type="primary"
+                    className="mt-auto !h-9 !w-full !cursor-pointer !rounded-lg"
+                    danger={isRunning}
+                    disabled={isCancelling || (!isRunning && !canGenerate)}
+                    onMouseDown={(event) => event.stopPropagation()}
+                    onClick={() => (isRunning ? onStop(node.id) : onGenerate(node.id))}
+                >
+                    <span className="inline-flex items-center gap-1.5">
+                        {isRunning ? (
+                            <>
+                                <LoaderCircle className="size-4 animate-spin" />
+                                <Square className="size-3.5 fill-current" />
+                                <span>{isCancelling ? "取消中" : t("canvas.configNode.stop")}</span>
+                            </>
+                        ) : (
+                            <>
+                                <Play className="size-4" />
+                                <span>{t("canvas.configNode.generate")}</span>
+                            </>
+                        )}
+                    </span>
+                </Button>
+            ) : null}
         </div>
     );
 }

@@ -3,6 +3,7 @@ import { canvasApi, type CanvasDocument, type CanvasSummary } from "@/platform/a
 import { useCanvasStore, type CanvasProject } from "@/stores/canvas/use-canvas-store";
 
 import { canvasSessionId } from "./session";
+import { lockManager } from "./lock";
 import { canvasSync } from "./sync-engine";
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -86,7 +87,7 @@ export const canvasLoader = {
     async open(id: string, signal?: AbortSignal): Promise<CanvasProject> {
         const document = await canvasApi.load(id, canvasSessionId(), signal);
         signal?.throwIfAborted();
-        const lock = await canvasApi.acquireLock(id, canvasSessionId(), signal);
+        await lockManager.acquire(id, signal);
         signal?.throwIfAborted();
         const cached = useCanvasStore.getState().openProject(id) ?? undefined;
         // 服务端文档是版本基线；IndexedDB 队列必须在其上重放，刷新后乐观修改才不会从界面消失。
@@ -99,7 +100,9 @@ export const canvasLoader = {
         } finally {
             canvasSync.setApplyingRemote(false);
         }
-        canvasSync.attach(id, document.version, { readonly: lock.mode !== "edit" });
+        const currentLock = lockManager.getState();
+        // 资源签名可能耗时较长；挂载同步时必须读取最新锁状态，不能复用 acquire 时的旧快照。
+        canvasSync.attach(id, document.version, { readonly: currentLock.canvasId !== id || currentLock.mode !== "edit" });
         return project;
     },
 };

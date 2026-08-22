@@ -23,7 +23,7 @@ type CanvasNodeHoverToolbarProps = {
     onDecreaseFont: (node: CanvasNodeData) => void;
     onIncreaseFont: (node: CanvasNodeData) => void;
     onToggleDialog: (node: CanvasNodeData) => void;
-    onGenerateImage: (node: CanvasNodeData) => void;
+    onGenerateImage?: (node: CanvasNodeData) => void;
     onUpload: (node: CanvasNodeData) => void;
     onDownload: (node: CanvasNodeData) => void;
     onSaveAsset: (node: CanvasNodeData) => void;
@@ -35,10 +35,11 @@ type CanvasNodeHoverToolbarProps = {
     onAngle: (node: CanvasNodeData) => void;
     onViewImage: (node: CanvasNodeData) => void;
     onReversePrompt: (node: CanvasNodeData) => void;
-    onRetry: (node: CanvasNodeData) => void;
+    onRetry?: (node: CanvasNodeData) => void;
     onToggleFreeResize: (node: CanvasNodeData) => void;
     onDelete: (node: CanvasNodeData) => void;
     extraTools?: CanvasNodeToolbarItem[];
+    readonly?: boolean;
 };
 
 type ToolbarTool = {
@@ -77,6 +78,7 @@ export function CanvasNodeHoverToolbar({
     onToggleFreeResize,
     onDelete,
     extraTools = [],
+    readonly = false,
 }: CanvasNodeHoverToolbarProps) {
     const [quickImageToolIds, setQuickImageToolIds] = useState<ImageQuickToolId[]>(defaultImageQuickToolIds);
     const [showImageToolLabels, setShowImageToolLabels] = useState(true);
@@ -128,7 +130,10 @@ export function CanvasNodeHoverToolbar({
         }
         copyText(prompt, t("common.promptCopied"));
     };
-    const imageTools = buildImageToolbarTools(node, { onUpload, onToggleFreeResize, onMaskEdit, onCrop, onSplit, onUpscale, onSuperResolve, onAngle, onViewImage, onCopyPrompt: copyImagePrompt, onReversePrompt });
+    const paidImageToolIds = new Set(["reversePrompt", "maskEdit", "superResolve", "angle"]);
+    const imageTools = buildImageToolbarTools(node, { onUpload, onToggleFreeResize, onMaskEdit, onCrop, onSplit, onUpscale, onSuperResolve, onAngle, onViewImage, onCopyPrompt: copyImagePrompt, onReversePrompt }).filter(
+        (tool) => !readonly || !paidImageToolIds.has(tool.id),
+    );
 
     function openImageToolSettings() {
         onKeep(activeNode.id);
@@ -142,18 +147,48 @@ export function CanvasNodeHoverToolbar({
         { id: "delete", title: t("canvas.nodeToolbar.removeTitle"), label: t("common.delete"), icon: <Trash2 className="size-4" />, onClick: () => onDelete(node), danger: true },
     ];
     const nodeToolbarTools: ToolbarTool[] = [
-        ...(canRetry ? [{ id: "retry", title: t("canvas.nodeToolbar.retryTitle"), label: t("canvas.node.retry"), icon: <RefreshCw className="size-4" />, onClick: () => onRetry(node) }] : []),
+        ...(canRetry && onRetry ? [{ id: "retry", title: t("canvas.nodeToolbar.retryTitle"), label: t("canvas.node.retry"), icon: <RefreshCw className="size-4" />, onClick: () => onRetry(node) }] : []),
         ...(hasImage || hasVideo || isText ? [{ id: "saveAsset", title: t("common.addToAssets"), label: t("canvas.nodeToolbar.saveAsset"), icon: <FolderPlus className="size-4" />, onClick: () => onSaveAsset(node) }] : []),
-        ...(hasImage || hasVideo || hasAudio ? [{ id: "download", title: t(hasAudio ? "canvas.nodeToolbar.downloadAudio" : hasVideo ? "canvas.nodeToolbar.downloadVideo" : "canvas.nodeToolbar.downloadImage"), label: t("common.download"), icon: <Download className="size-4" />, onClick: () => onDownload(node) }] : []),
+        ...(hasImage || hasVideo || hasAudio
+            ? [
+                  {
+                      id: "download",
+                      title: t(hasAudio ? "canvas.nodeToolbar.downloadAudio" : hasVideo ? "canvas.nodeToolbar.downloadVideo" : "canvas.nodeToolbar.downloadImage"),
+                      label: t("common.download"),
+                      icon: <Download className="size-4" />,
+                      onClick: () => onDownload(node),
+                  },
+              ]
+            : []),
         ...(canOpenDialog ? [{ id: "edit", title: t("common.edit"), label: t("common.edit"), icon: <MessageSquare className="size-4" />, onClick: () => onToggleDialog(node) }] : []),
         ...(isText ? [{ id: "editText", title: t("canvas.nodeToolbar.editTextTitle"), label: t("canvas.nodeToolbar.editText"), icon: <Pencil className="size-4" />, onClick: () => onEditText(node) }] : []),
-        ...(isText ? [{ id: "generateImage", title: t("canvas.node.generateImage"), label: t("canvas.node.generate"), icon: <ImageIcon className="size-4" />, onClick: () => onGenerateImage(node) }] : []),
+        ...(isText && onGenerateImage ? [{ id: "generateImage", title: t("canvas.node.generateImage"), label: t("canvas.node.generate"), icon: <ImageIcon className="size-4" />, onClick: () => onGenerateImage(node) }] : []),
         ...(isConfig ? [{ id: "config", title: t("canvas.configNode.title"), label: t("canvas.configNode.title"), icon: <Settings2 className="size-4" />, onClick: () => onToggleDialog(node) }] : []),
         ...(isText ? [{ id: "decreaseFont", title: t("canvas.nodeToolbar.decreaseFont"), label: t("canvas.nodeToolbar.zoomOut"), icon: <Minus className="size-4" />, onClick: () => onDecreaseFont(node) }] : []),
         ...(isText ? [{ id: "increaseFont", title: t("canvas.nodeToolbar.increaseFont"), label: t("canvas.nodeToolbar.zoomIn"), icon: <Plus className="size-4" />, onClick: () => onIncreaseFont(node) }] : []),
         ...(isImage && !hasImage ? [{ id: "uploadImage", title: t("canvas.nodeToolbar.uploadImage"), label: t("canvas.nodeToolbar.uploadImage"), icon: <Upload className="size-4" />, onClick: () => onUpload(node) }] : []),
-        ...(isVideo ? [{ id: "uploadVideo", title: t(hasVideo ? "canvas.nodeToolbar.replaceVideo" : "canvas.nodeToolbar.uploadVideo"), label: t(hasVideo ? "canvas.nodeToolbar.replaceVideo" : "canvas.nodeToolbar.uploadVideo"), icon: <Video className="size-4" />, onClick: () => onUpload(node) }] : []),
-        ...(isAudio ? [{ id: "uploadAudio", title: t(hasAudio ? "canvas.nodeToolbar.replaceAudio" : "canvas.nodeToolbar.uploadAudio"), label: t(hasAudio ? "canvas.nodeToolbar.replaceAudio" : "canvas.nodeToolbar.uploadAudio"), icon: <Music2 className="size-4" />, onClick: () => onUpload(node) }] : []),
+        ...(isVideo
+            ? [
+                  {
+                      id: "uploadVideo",
+                      title: t(hasVideo ? "canvas.nodeToolbar.replaceVideo" : "canvas.nodeToolbar.uploadVideo"),
+                      label: t(hasVideo ? "canvas.nodeToolbar.replaceVideo" : "canvas.nodeToolbar.uploadVideo"),
+                      icon: <Video className="size-4" />,
+                      onClick: () => onUpload(node),
+                  },
+              ]
+            : []),
+        ...(isAudio
+            ? [
+                  {
+                      id: "uploadAudio",
+                      title: t(hasAudio ? "canvas.nodeToolbar.replaceAudio" : "canvas.nodeToolbar.uploadAudio"),
+                      label: t(hasAudio ? "canvas.nodeToolbar.replaceAudio" : "canvas.nodeToolbar.uploadAudio"),
+                      icon: <Music2 className="size-4" />,
+                      onClick: () => onUpload(node),
+                  },
+              ]
+            : []),
         ...(hasImage ? imageTools.map((tool) => ({ id: tool.id, title: tool.title, label: tool.label, icon: tool.icon, active: tool.active, onClick: tool.onClick })) : []),
     ];
     const toolbarTools = hasImage ? [...baseToolbarTools, ...nodeToolbarTools].filter((tool) => quickImageToolIdSet.has(tool.id as ImageQuickToolId)) : [...baseToolbarTools, ...nodeToolbarTools, ...extraTools];
@@ -196,7 +231,17 @@ export function CanvasNodeHoverToolbar({
                 {toolbarTools.map((tool) => (
                     <ToolbarAction key={tool.id} {...tool} showLabel={showImageToolLabels} />
                 ))}
-                {hasImage ? <ToolbarAction id="more" title={t("canvas.imageTools.configure")} label={t("canvas.imageTools.more")} icon={<Ellipsis className="size-4" />} active={imageToolSettingsOpen} onClick={openImageToolSettings} showLabel={showImageToolLabels} /> : null}
+                {hasImage ? (
+                    <ToolbarAction
+                        id="more"
+                        title={t("canvas.imageTools.configure")}
+                        label={t("canvas.imageTools.more")}
+                        icon={<Ellipsis className="size-4" />}
+                        active={imageToolSettingsOpen}
+                        onClick={openImageToolSettings}
+                        showLabel={showImageToolLabels}
+                    />
+                ) : null}
             </div>
             {hasImage ? (
                 <ImageToolSettingsModal
@@ -261,7 +306,18 @@ export function CanvasNodeInfoModal({ node, open, onClose }: { node: CanvasNodeD
                         <div className="thin-scrollbar h-full space-y-3 overflow-auto pr-1">
                             <InfoRow label="ID" value={node.id} />
                             <InfoRow label={t("canvas.nodeToolbar.name")} value={node.title || t("canvas.node.untitled")} />
-                            <InfoRow label={t("canvas.nodeToolbar.type")} value={node.type === CanvasNodeType.Group ? t("canvas.node.group") : node.type === CanvasNodeType.Config ? t("canvas.configNode.title") : [CanvasNodeType.Image, CanvasNodeType.Video, CanvasNodeType.Audio, CanvasNodeType.Text].includes(node.type as CanvasNodeType) ? t(`assets.kinds.${node.type}`) : getNodeDefinition(node.type)?.title || node.type} />
+                            <InfoRow
+                                label={t("canvas.nodeToolbar.type")}
+                                value={
+                                    node.type === CanvasNodeType.Group
+                                        ? t("canvas.node.group")
+                                        : node.type === CanvasNodeType.Config
+                                          ? t("canvas.configNode.title")
+                                          : [CanvasNodeType.Image, CanvasNodeType.Video, CanvasNodeType.Audio, CanvasNodeType.Text].includes(node.type as CanvasNodeType)
+                                            ? t(`assets.kinds.${node.type}`)
+                                            : getNodeDefinition(node.type)?.title || node.type
+                                }
+                            />
                             <InfoRow label={t("canvas.nodeToolbar.size")} value={`${Math.round(node.width)} x ${Math.round(node.height)}`} />
                             <InfoRow label={t("canvas.nodeToolbar.position")} value={`${Math.round(node.position.x)}, ${Math.round(node.position.y)}`} />
                             <InfoRow label={t("canvas.nodeToolbar.status")} value={node.metadata?.status || "idle"} />

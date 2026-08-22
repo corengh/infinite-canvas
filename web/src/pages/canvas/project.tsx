@@ -71,6 +71,9 @@ import { cancelTask, getTask, isTerminalTask, trackTask } from "@/platform/api/g
 import { canvasLoader } from "@/platform/canvas/loader";
 import { canvasEvents } from "@/platform/canvas/events";
 import { CanvasSyncStatus } from "@/platform/canvas/sync-status";
+import { canvasSync } from "@/platform/canvas/sync-engine";
+import { lockManager, useCanvasLockState } from "@/platform/canvas/lock";
+import { ReadonlyBanner } from "@/platform/components/readonly-banner";
 import { CanvasRefreshShell } from "@/components/canvas/canvas-refresh-shell";
 import { CanvasTopBar } from "@/components/canvas/canvas-top-bar";
 import { ConnectionCreateMenu, NodeCreateMenu, type PendingConnectionCreate } from "@/components/canvas/canvas-create-menus";
@@ -150,6 +153,8 @@ function InfiniteCanvasPage() {
     const navigate = useNavigate();
     const [searchParams] = useSearchParams();
     const projectId = params.id || "";
+    const lockState = useCanvasLockState();
+    const isReadonly = lockState.canvasId === projectId && lockState.mode === "readonly";
     const localAgentConnected = useAgentStore((state) => state.connected);
     const localAgentActivity = useAgentStore((state) => state.activity);
     const localAgentEnabled = useAgentStore((state) => state.enabled);
@@ -189,6 +194,10 @@ function InfiniteCanvasPage() {
     const openConfigDialog = useConfigStore((state) => state.openConfigDialog);
     const confirmCanvasGeneration = useCallback(
         async (node: CanvasNodeData | undefined, mode: CanvasNodeGenerationMode, prompt: string, hasImageReference: boolean) => {
+            if (isReadonly) {
+                message.warning({ key: "canvas-readonly", content: "你处于只读模式，无法发起生成" });
+                return false;
+            }
             if (!node || mode === "audio") return false;
             const modelCode = node.metadata?.model;
             if (!modelCode) {
@@ -209,7 +218,7 @@ function InfiniteCanvasPage() {
                 return false;
             }
         },
-        [message],
+        [isReadonly, message],
     );
     const addAsset = useAssetStore((state) => state.addAsset);
     const cleanupAssetImages = useAssetStore((state) => state.cleanupImages);
@@ -311,37 +320,40 @@ function InfiniteCanvasPage() {
         return controller;
     }, []);
 
-    const finishGenerationRequest = useCallback((targetNodeId: string, controller: AbortController) => {
-        const request = generationRequestsRef.current.get(targetNodeId);
-        if (request?.controller === controller) {
-            generationRequestsRef.current.delete(targetNodeId);
-            if (![...generationRequestsRef.current.values()].some((item) => item.runningNodeId === request.runningNodeId)) {
-                setActiveGenerationIds((current) => {
-                    const next = new Set(current);
-                    next.delete(request.runningNodeId);
-                    return next;
-                });
+    const finishGenerationRequest = useCallback(
+        (targetNodeId: string, controller: AbortController) => {
+            const request = generationRequestsRef.current.get(targetNodeId);
+            if (request?.controller === controller) {
+                generationRequestsRef.current.delete(targetNodeId);
+                if (![...generationRequestsRef.current.values()].some((item) => item.runningNodeId === request.runningNodeId)) {
+                    setActiveGenerationIds((current) => {
+                        const next = new Set(current);
+                        next.delete(request.runningNodeId);
+                        return next;
+                    });
+                }
+                if (controller.signal.aborted) {
+                    setNodes((prev) =>
+                        prev.map((node) =>
+                            node.id === targetNodeId && node.metadata?.generationStatus === "cancelling" && !node.metadata.taskIds?.length && !node.metadata.taskId
+                                ? {
+                                      ...node,
+                                      metadata: {
+                                          ...node.metadata,
+                                          status: NODE_STATUS_ERROR,
+                                          generationStatus: undefined,
+                                          errorDetails: t("common.requestCanceled"),
+                                          images: node.metadata.images?.map((image) => (image.status === NODE_STATUS_LOADING ? { ...image, status: NODE_STATUS_ERROR, errorDetails: t("common.requestCanceled") } : image)),
+                                      },
+                                  }
+                                : node,
+                        ),
+                    );
+                }
             }
-            if (controller.signal.aborted) {
-                setNodes((prev) =>
-                    prev.map((node) =>
-                        node.id === targetNodeId && node.metadata?.generationStatus === "cancelling" && !node.metadata.taskIds?.length && !node.metadata.taskId
-                            ? {
-                                  ...node,
-                                  metadata: {
-                                      ...node.metadata,
-                                      status: NODE_STATUS_ERROR,
-                                      generationStatus: undefined,
-                                      errorDetails: t("common.requestCanceled"),
-                                      images: node.metadata.images?.map((image) => (image.status === NODE_STATUS_LOADING ? { ...image, status: NODE_STATUS_ERROR, errorDetails: t("common.requestCanceled") } : image)),
-                                  },
-                              }
-                            : node,
-                    ),
-                );
-            }
-        }
-    }, [t]);
+        },
+        [t],
+    );
 
     const platformRequestOptions = useCallback(
         (targetNodeId: string, controller: AbortController, slotId?: string): PlatformRequestOptions => ({
@@ -492,6 +504,8 @@ function InfiniteCanvasPage() {
         return () => {
             active = false;
             controller.abort();
+            void lockManager.release(projectId);
+            canvasSync.detach(projectId);
         };
     }, [hydrated, message, navigate, projectId]);
 
@@ -510,6 +524,52 @@ function InfiniteCanvasPage() {
             }),
         [projectId],
     );
+
+    useEffect(
+        () =>
+            canvasEvents.on("readonly-edit-blocked", () => {
+                message.warning({ key: "canvas-readonly", content: "你处于只读模式，修改不会被保存" });
+            }),
+        [message],
+    );
+
+    useEffect(
+        () =>
+            canvasEvents.on("lock-lost", () => {
+                void canvasSync.unsavedCount(projectId).then((count) => {
+                    const holder = lockManager.getState().holder?.display_name || "其他用户";
+                    modal.confirm({
+                        title: `画布已被${holder}接管`,
+                        content: `你有 ${count} 处修改尚未保存。`,
+                        okText: "知道了",
+                        cancelText: "导出这些修改",
+                        closable: false,
+                        maskClosable: false,
+                        onCancel: () => void canvasSync.exportUnsaved().then((blob) => saveAs(blob, `canvas-unsaved-${Date.now()}.json`)),
+                    });
+                });
+            }),
+        [modal, projectId],
+    );
+
+    const takeoverPromptKeyRef = useRef<string | null>(null);
+    useEffect(() => {
+        // 服务端锁按标签页 session 区分；只有实际持锁的编辑端才处理接管申请。
+        const request = lockState.canvasId === projectId && lockState.mode === "edit" && !lockState.pending ? lockState.takeover_request : null;
+        if (!request || request.requested_at === takeoverPromptKeyRef.current) return;
+        takeoverPromptKeyRef.current = request.requested_at;
+        const requester = request.by?.display_name || "其他用户";
+        modal.confirm({
+            title: `${requester}申请接管`,
+            content: "你可以让出编辑权，或继续编辑并取消本次申请。",
+            okText: "继续编辑",
+            cancelText: "让出",
+            closable: false,
+            maskClosable: false,
+            onOk: () => lockManager.respondTakeover(),
+            onCancel: () => lockManager.yieldLock(),
+        });
+    }, [lockState.canvasId, lockState.mode, lockState.pending, lockState.takeover_request, modal, projectId]);
 
     useEffect(() => {
         if (!projectLoaded) return;
@@ -1164,10 +1224,12 @@ function InfiniteCanvasPage() {
     }, [createProject, message, navigate, t]);
 
     const deleteCurrentProject = useCallback(() => {
-        void deleteProjects([projectId]).then(() => {
-            cleanupAssetImages();
-            navigate("/canvas");
-        }).catch((error) => message.error(error instanceof Error ? error.message : "画布删除失败"));
+        void deleteProjects([projectId])
+            .then(() => {
+                cleanupAssetImages();
+                navigate("/canvas");
+            })
+            .catch((error) => message.error(error instanceof Error ? error.message : "画布删除失败"));
     }, [cleanupAssetImages, deleteProjects, message, navigate, projectId]);
 
     const exportCurrentProject = useCallback(async () => {
@@ -2966,13 +3028,14 @@ function InfiniteCanvasPage() {
                     onGenerate={handleGenerateNode}
                     onStop={confirmStopGeneration}
                     modeOverride={getNodeDefinition(panelNode.type)?.useBuiltinPanel?.mode}
+                    readonly={isReadonly}
                     onImageSettingsOpenChange={(open) => {
                         setNodeImageSettingsOpen(open);
                         if (open) setToolbarNodeId(null);
                     }}
                 />
             ),
-        [activeGenerationIds, configInputsById, confirmStopGeneration, handleConfigNodeChange, handleGenerateNode, handleNodePromptChange, mentionReferencesByNodeId, renderPluginPanel],
+        [activeGenerationIds, configInputsById, confirmStopGeneration, handleConfigNodeChange, handleGenerateNode, handleNodePromptChange, isReadonly, mentionReferencesByNodeId, renderPluginPanel],
     );
 
     const renderNodeContentPanel = useCallback(
@@ -2984,13 +3047,14 @@ function InfiniteCanvasPage() {
                 onConfigChange={handleConfigNodeChange}
                 onComposerToggle={() => setDialogNodeId((current) => (current === contentNode.id ? null : contentNode.id))}
                 onStop={confirmStopGeneration}
+                readonly={isReadonly}
                 onGenerate={(nodeId) => {
                     const target = nodesRef.current.find((item) => item.id === nodeId);
                     void handleGenerateNode(nodeId, target?.metadata?.generationMode || "image", target?.metadata?.composerContent ?? target?.metadata?.prompt ?? "");
                 }}
             />
         ),
-        [activeGenerationIds, configInputsById, confirmStopGeneration, handleConfigNodeChange, handleGenerateNode],
+        [activeGenerationIds, configInputsById, confirmStopGeneration, handleConfigNodeChange, handleGenerateNode, isReadonly],
     );
 
     if (!projectLoaded) return <CanvasRefreshShell />;
@@ -3000,6 +3064,8 @@ function InfiniteCanvasPage() {
             <CanvasSidePanel nodes={nodes} selectedNodeIds={selectedNodeIds} onFocusNode={focusNode} onPreviewNode={setPreviewNodeId} onInsertAsset={handleAssetInsert} />
             <section className="relative min-w-0 flex-1 overflow-hidden">
                 <CanvasSyncStatus />
+                {/* [PLATFORM] 只读模式横幅与轻遮罩（design FE-8 / 接缝 #9）。 */}
+                <ReadonlyBanner />
                 <CanvasTopBar
                     title={currentProject?.title || t("canvas.projectPage.untitledCanvas")}
                     titleDraft={titleDraft}
@@ -3105,10 +3171,10 @@ function InfiniteCanvasPage() {
                             onSetBatchPrimary={setBatchPrimary}
                             onDuplicateBatchImage={duplicateBatchImage}
                             onDownloadBatchImage={downloadBatchImage}
-                            onRetryBatchImage={retryBatchImage}
+                            onRetryBatchImage={isReadonly ? undefined : retryBatchImage}
                             onDeleteBatchImage={deleteBatchImage}
-                            onRetry={handleNodeRetry}
-                            onGenerateImage={generateImageFromTextNode}
+                            onRetry={isReadonly ? undefined : handleNodeRetry}
+                            onGenerateImage={isReadonly ? undefined : generateImageFromTextNode}
                             onViewImage={handleNodeViewImage}
                             onContextMenu={handleNodeContextMenu}
                         />
@@ -3143,6 +3209,7 @@ function InfiniteCanvasPage() {
                 <CanvasNodeHoverToolbar
                     node={isNodeDragging || isNodeResizing || nodeImageSettingsOpen || expandedImageNodeId ? null : toolbarNode}
                     viewport={viewport}
+                    readonly={isReadonly}
                     extraTools={toolbarNode ? buildNodeToolbarItems(toolbarNode) : undefined}
                     onKeep={keepNodeToolbar}
                     onLeave={hideNodeToolbar}
@@ -3151,7 +3218,7 @@ function InfiniteCanvasPage() {
                     onDecreaseFont={(node) => handleFontSizeChange(node.id, Math.max(10, (node.metadata?.fontSize || 14) - 2))}
                     onIncreaseFont={(node) => handleFontSizeChange(node.id, Math.min(32, (node.metadata?.fontSize || 14) + 2))}
                     onToggleDialog={(node) => setDialogNodeId((current) => (current === node.id ? null : node.id))}
-                    onGenerateImage={generateImageFromTextNode}
+                    onGenerateImage={isReadonly ? undefined : generateImageFromTextNode}
                     onUpload={(node) => handleUploadRequest(node.id)}
                     onDownload={downloadNodeImage}
                     onSaveAsset={(node) => void saveNodeAsset(node)}
@@ -3163,7 +3230,7 @@ function InfiniteCanvasPage() {
                     onAngle={(node) => setAngleNodeId(node.id)}
                     onViewImage={(node) => setPreviewNodeId(node.id)}
                     onReversePrompt={createImageReversePromptNodes}
-                    onRetry={(node) => void handleRetryNode(node)}
+                    onRetry={isReadonly ? undefined : (node) => void handleRetryNode(node)}
                     onToggleFreeResize={(node) => toggleNodeFreeResize(node.id)}
                     onDelete={(node) => deleteNodes(new Set([node.id]))}
                 />

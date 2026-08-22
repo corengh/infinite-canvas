@@ -83,11 +83,26 @@ export class SyncEngine {
 
     onProjectPatched(id: string, previous: CanvasProject | null, next: CanvasProject): void {
         if (this.applyingRemote || this.canvasId !== id) return;
+        if (this.readonly) {
+            // 只读标签页允许用户拖动查看，但绝不能产生 op 或进入离线队列。
+            canvasEvents.emit("readonly-edit-blocked");
+            return;
+        }
         this.latestProject = next;
         diffProject(previous, next).forEach((operation) => this.fold(operation));
-        // 只读态原则上由 FE-8 禁止编辑；若仍有迟到状态变更，也必须进入导出通道而不是静默丢弃。
-        if (this.pending.size && !this.readonly) this.scheduleFlush();
+        if (this.pending.size) this.scheduleFlush();
         void this.refreshStatus();
+    }
+
+    setReadonly(value: boolean): void {
+        this.readonly = value;
+        if (value) this.cancelTimers();
+        else this.scheduleFlush(0);
+        void this.refreshStatus();
+    }
+
+    markLockLost(details?: Record<string, unknown>): void {
+        this.loseLock(details);
     }
 
     pauseSubmissions(): void {

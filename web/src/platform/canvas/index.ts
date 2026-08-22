@@ -2,4 +2,5 @@
 export { canvasEvents } from "./events";
 export type { CanvasEvent } from "./events";
 export { canvasLoader } from "./loader";
+export { lockManager, LockManager, useCanvasLockState } from "./lock";
 export { canvasSync, SyncEngine } from "./sync-engine";

@@ -337,6 +337,19 @@ describe("SyncEngine", () => {
         expect(await (await engine.exportUnsaved()).text()).toContain("node.update");
     });
 
+    it("只读模式下的本地编辑不产生 op", async () => {
+        vi.useFakeTimers();
+        const { engine, calls, queue } = engineHarness();
+        engine.setReadonly(true);
+        const before = project({ nodes: [node("n")] });
+        const after = project({ nodes: [node("n", 9)] });
+        engine.onProjectPatched(after.id, before, after);
+        await vi.advanceTimersByTimeAsync(1000);
+        expect(calls).toHaveLength(0);
+        expect(await queue.count(after.id)).toBe(0);
+        expect(await engine.unsavedCount(after.id)).toBe(0);
+    });
+
     it("画布已删除时停止重试并保留未保存操作", async () => {
         vi.useFakeTimers();
         const { engine, calls, queue } = engineHarness({
