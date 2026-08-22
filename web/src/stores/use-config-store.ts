@@ -8,7 +8,6 @@ export type PlatformModelCapability = "text2image" | "image2image" | "text2video
 export type ReasoningEffort = "auto" | "low" | "medium" | "high" | "xhigh";
 export type ChannelModel = { name: string; capability: ModelCapability };
 export type ModelChannel = { id: string; name: string; apiFormat: ApiCallFormat; models: ChannelModel[] };
-export type WebdavSyncConfig = { url: string; username: string; password: string; directory: string; lastSyncedAt: string };
 export type ConfigTabKey = "preferences";
 
 export type AiConfig = {
@@ -71,18 +70,14 @@ export const defaultConfig: AiConfig = {
     canvasBackground: "lines",
     generationParams: {},
 };
-export const defaultWebdavSyncConfig: WebdavSyncConfig = { url: "", username: "", password: "", directory: "infinite-canvas", lastSyncedAt: "" };
-
 type ConfigStore = {
     config: AiConfig;
-    webdav: WebdavSyncConfig;
     isConfigOpen: boolean;
     configTab: ConfigTabKey;
     shouldPromptContinue: boolean;
     updateConfig: <K extends keyof AiConfig>(key: K, value: AiConfig[K]) => void;
     setPlatformModels: (models: ChannelModel[]) => void;
     applyServerPreferences: (preferences?: Record<string, unknown>) => void;
-    updateWebdavConfig: <K extends keyof WebdavSyncConfig>(key: K, value: WebdavSyncConfig[K]) => void;
     isAiConfigReady: (config: AiConfig, model: string) => boolean;
     openConfigDialog: (shouldPromptContinue?: boolean) => void;
     setConfigDialogOpen: (open: boolean) => void;
@@ -129,7 +124,6 @@ export const useConfigStore = create<ConfigStore>()(
     persist(
         (set) => ({
             config: defaultConfig,
-            webdav: defaultWebdavSyncConfig,
             isConfigOpen: false,
             configTab: "preferences",
             shouldPromptContinue: false,
@@ -179,7 +173,6 @@ export const useConfigStore = create<ConfigStore>()(
                         },
                     };
                 }),
-            updateWebdavConfig: (key, value) => set((state) => ({ webdav: { ...state.webdav, [key]: value } })),
             isAiConfigReady: (_config, model) => Boolean(model.trim()),
             openConfigDialog: (shouldPromptContinue = false) => set({ isConfigOpen: true, shouldPromptContinue }),
             setConfigDialogOpen: (isConfigOpen) => set({ isConfigOpen }),

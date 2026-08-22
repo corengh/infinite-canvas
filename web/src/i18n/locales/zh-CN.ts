@@ -4,6 +4,12 @@ export default {
         description: "一个无限画布创作工具",
     },
     theme: { toggle: "切换主题" },
+    platform: {
+        foundation: {
+            runtimeConfig: "平台运行时配置",
+            remotePluginsDisabled: "远程插件已禁用",
+        },
+    },
     fe9: {
         assets: {
             title: "资产库",

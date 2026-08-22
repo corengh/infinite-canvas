@@ -4,6 +4,12 @@ export default {
         description: "An infinite canvas creation tool",
     },
     theme: { toggle: "Toggle theme" },
+    platform: {
+        foundation: {
+            runtimeConfig: "Platform runtime configuration",
+            remotePluginsDisabled: "Remote plugins are disabled",
+        },
+    },
     fe9: {
         assets: {
             title: "Asset Library",
