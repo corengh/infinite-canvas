@@ -29,31 +29,32 @@ export function buildCanvasResourceReferences(nodes: CanvasNodeData[]) {
 
 export async function resolveCanvasReferenceImages(references: CanvasResourceReference[], nodes: CanvasNodeData[]) {
     const nodesById = new Map(nodes.map((node) => [node.id, node]));
-    return Promise.all(references.filter((reference) => reference.kind === "image").map(async (reference) => {
-        const node = nodesById.get(reference.nodeId);
-        if (!node) throw new Error(i18n.t("agent.composer.mentions.resourceMissing", { title: reference.title }));
-        const metadata = node.metadata;
-        const dataUrl = await imageToDataUrl({ storageKey: metadata?.storageKey, url: reference.previewUrl });
-        if (!dataUrl.startsWith("data:image/")) throw new Error(i18n.t("agent.composer.mentions.imageReadFailed", { title: reference.title }));
-        const meta = metadata?.naturalWidth && metadata.naturalHeight
-            ? { width: metadata.naturalWidth, height: metadata.naturalHeight, mimeType: metadata.mimeType || dataUrl.match(/^data:([^;]+)/)?.[1] || "image/png" }
-            : await readImageMeta(dataUrl);
-        return {
-            id: `canvas:${node.id}`,
-            name: reference.title,
-            type: metadata?.mimeType || meta.mimeType,
-            size: metadata?.bytes || getDataUrlByteSize(dataUrl),
-            width: meta.width,
-            height: meta.height,
-            url: reference.previewUrl || dataUrl,
-            dataUrl,
-        };
-    }));
+    return Promise.all(
+        references
+            .filter((reference) => reference.kind === "image")
+            .map(async (reference) => {
+                const node = nodesById.get(reference.nodeId);
+                if (!node) throw new Error(i18n.t("agent.composer.mentions.resourceMissing", { title: reference.title }));
+                const metadata = node.metadata;
+                const dataUrl = await imageToDataUrl({ storageKey: metadata?.storageKey, url: reference.previewUrl });
+                if (!dataUrl.startsWith("data:image/")) throw new Error(i18n.t("agent.composer.mentions.imageReadFailed", { title: reference.title }));
+                const meta =
+                    metadata?.naturalWidth && metadata.naturalHeight ? { width: metadata.naturalWidth, height: metadata.naturalHeight, mimeType: metadata.mimeType || dataUrl.match(/^data:([^;]+)/)?.[1] || "image/png" } : await readImageMeta(dataUrl);
+                return {
+                    id: `canvas:${node.id}`,
+                    name: reference.title,
+                    type: metadata?.mimeType || meta.mimeType,
+                    size: metadata?.bytes || getDataUrlByteSize(dataUrl),
+                    width: meta.width,
+                    height: meta.height,
+                    url: reference.previewUrl || dataUrl,
+                    dataUrl,
+                };
+            }),
+    );
 }
 
 export function getMentionResourceNodes(nodeId: string, nodes: CanvasNodeData[], connections: CanvasConnection[]) {
-    const configInputs = getConnectedConfigResourceNodes(nodeId, nodes, connections);
-    if (configInputs.length) return configInputs;
     const ownInputs = getContextResourceNodes(nodeId, nodes, connections);
     if (ownInputs.length) return ownInputs;
     const node = nodes.find((item) => item.id === nodeId);
@@ -61,8 +62,6 @@ export function getMentionResourceNodes(nodeId: string, nodes: CanvasNodeData[],
 }
 
 export function getGenerationResourceNodes(nodeId: string, nodes: CanvasNodeData[], connections: CanvasConnection[]) {
-    const configInputs = getConnectedConfigResourceNodes(nodeId, nodes, connections);
-    if (configInputs.length) return configInputs;
     const ownInputs = getContextResourceNodes(nodeId, nodes, connections);
     if (ownInputs.length) return ownInputs;
     return [];
@@ -73,12 +72,6 @@ function getContextResourceNodes(nodeId: string, nodes: CanvasNodeData[], connec
         .filter((connection) => connection.toNodeId === nodeId)
         .map((connection) => nodes.find((node) => node.id === connection.fromNodeId))
         .filter((node): node is CanvasNodeData => Boolean(node && isResourceNode(node)));
-}
-
-function getConnectedConfigResourceNodes(nodeId: string, nodes: CanvasNodeData[], connections: CanvasConnection[]) {
-    const configConnection = connections.find((connection) => connection.fromNodeId === nodeId && nodes.find((node) => node.id === connection.toNodeId)?.type === CanvasNodeType.Config);
-    if (!configConnection) return [];
-    return getContextResourceNodes(configConnection.toNodeId, nodes, connections).filter((node) => node.id !== nodeId);
 }
 
 function labelResourceNodes(nodes: CanvasNodeData[], active: boolean) {

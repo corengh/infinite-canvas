@@ -1,12 +1,38 @@
 import { field } from "../utils/value.js";
 import type { CodexPlanUpdate } from "./codex-protocol.js";
 
-type AgentHistoryMessage = { id: string; itemId: string; threadId: string; turnId: string; role: "user" | "assistant" | "tool" | "error"; title?: string; text: string; detail?: unknown; activityItems?: Record<string, string> };
-export type CodexSupplementalHistoryItem = { threadId: string; turnId: string; itemId: string; sequence?: number; item: Record<string, unknown> };
-export type CodexSupplementalHistoryTurn = { threadId: string; turnId: string; turn: Record<string, unknown> };
-export type CodexSupplementalHistory = { items: CodexSupplementalHistoryItem[]; turns: CodexSupplementalHistoryTurn[] };
+type AgentHistoryMessage = {
+    id: string;
+    itemId: string;
+    threadId: string;
+    turnId: string;
+    role: "user" | "assistant" | "tool" | "error";
+    title?: string;
+    text: string;
+    detail?: unknown;
+    activityItems?: Record<string, string>;
+};
+export type CodexSupplementalHistoryItem = {
+    threadId: string;
+    turnId: string;
+    itemId: string;
+    sequence?: number;
+    item: Record<string, unknown>;
+};
+export type CodexSupplementalHistoryTurn = {
+    threadId: string;
+    turnId: string;
+    turn: Record<string, unknown>;
+};
+export type CodexSupplementalHistory = {
+    items: CodexSupplementalHistoryItem[];
+    turns: CodexSupplementalHistoryTurn[];
+};
 
-const emptySupplementalHistory: CodexSupplementalHistory = { items: [], turns: [] };
+const emptySupplementalHistory: CodexSupplementalHistory = {
+    items: [],
+    turns: [],
+};
 
 /** 将 Codex 线程转换为列表展示所需的摘要。 */
 export function summarizeCodexThread(thread: unknown) {
@@ -47,8 +73,24 @@ export function threadMessages(thread: unknown, planUpdates: CodexPlanUpdate[] =
         if (!turnId || !isSettledTurn(turn)) return;
         const turnError = String(field(field(turn, "error"), "message") || "").trim();
         const items = mergeHistoryItems(arrayValue(field(turn, "items")), supplementalByTurn.get(turnId) || []);
-        const push = (message: Omit<AgentHistoryMessage, "itemId" | "threadId" | "turnId">) => messages.push({ ...message, id: historyMessageId(threadId, turnId, message.id), itemId: message.id, threadId, turnId });
-        const planMessage = structuredPlanMessage(plansByTurn.get(turnId) || { threadId, turnId, explanation: stringOrNull(field(turn, "explanation")), plan: arrayValue(field(turn, "plan")) as CodexPlanUpdate["plan"], turnStatus: String(field(turn, "status") || "") }, threadId);
+        const push = (message: Omit<AgentHistoryMessage, "itemId" | "threadId" | "turnId">) =>
+            messages.push({
+                ...message,
+                id: historyMessageId(threadId, turnId, message.id),
+                itemId: message.id,
+                threadId,
+                turnId,
+            });
+        const planMessage = structuredPlanMessage(
+            plansByTurn.get(turnId) || {
+                threadId,
+                turnId,
+                explanation: stringOrNull(field(turn, "explanation")),
+                plan: arrayValue(field(turn, "plan")) as CodexPlanUpdate["plan"],
+                turnStatus: String(field(turn, "status") || ""),
+            },
+            threadId,
+        );
         const reasoningItems = items.flatMap((item) => {
             if (field(item, "type") !== "reasoning") return [];
             const id = String(field(item, "id") || "");
@@ -57,7 +99,7 @@ export function threadMessages(thread: unknown, planUpdates: CodexPlanUpdate[] =
         });
         const reasoningText = reasoningItems.map((item) => item.text).join("\n\n");
         const reasoningStatus = aggregateItemStatus(reasoningItems.map((item) => item.status));
-        const itemErrors = items.flatMap((item) => field(item, "type") === "error" ? [readableText(field(item, "message"))] : []).filter(Boolean);
+        const itemErrors = items.flatMap((item) => (field(item, "type") === "error" ? [readableText(field(item, "message"))] : [])).filter(Boolean);
         const itemError = itemErrors[itemErrors.length - 1] || "";
         let userAdded = false;
         let planAdded = false;
@@ -95,64 +137,174 @@ export function threadMessages(thread: unknown, planUpdates: CodexPlanUpdate[] =
                 const tool = String(field(item, "tool") || "工具调用");
                 const error = String(field(field(item, "error"), "message") || "");
                 const input = toolArguments(field(item, "arguments"));
-                push({ id, role: "tool", title: toolName(tool), text: error || toolHistorySummary(tool, item, input), detail: toolHistoryDetail(tool, item, input, error) });
+                push({
+                    id,
+                    role: "tool",
+                    title: toolName(tool),
+                    text: error || toolHistorySummary(tool, item, input),
+                    detail: toolHistoryDetail(tool, item, input, error),
+                });
             }
             if (type === "commandExecution") {
                 const command = String(field(item, "command") || "").trim();
                 const detail = commandDetail(item);
-                push({ id, role: "tool", title: "执行命令", text: command || (detail.status === "failed" ? "命令执行失败" : "命令已完成"), detail });
+                push({
+                    id,
+                    role: "tool",
+                    title: "执行命令",
+                    text: command || (detail.status === "failed" ? "命令执行失败" : "命令已完成"),
+                    detail,
+                });
             }
             if (type === "fileChange") {
                 const changes = arrayValue(field(item, "changes"));
                 const error = itemErrorMessage(item);
-                push({ id, role: "tool", title: "修改文件", text: error || fileChangeSummary(changes), detail: { kind: "file", status: itemStatus(item, error), files: changes.map((change) => ({ path: String(field(change, "path") || "未知文件"), action: changeKind(field(change, "kind")) })), ...(error ? { output: error } : {}) } });
+                push({
+                    id,
+                    role: "tool",
+                    title: "修改文件",
+                    text: error || fileChangeSummary(changes),
+                    detail: {
+                        kind: "file",
+                        status: itemStatus(item, error),
+                        files: changes.map((change) => ({
+                            path: String(field(change, "path") || "未知文件"),
+                            action: changeKind(field(change, "kind")),
+                        })),
+                        ...(error ? { output: error } : {}),
+                    },
+                });
             }
             if (type === "reasoning" && reasoningText && !reasoningAdded) {
                 const sourceItemIds = reasoningItems.map((item) => item.id);
-                push({ id: "synthetic:reasoning", role: "tool", title: "思考摘要", text: reasoningText, activityItems: Object.fromEntries(reasoningItems.map((item) => [item.id, item.text])), detail: { kind: "reasoning", status: reasoningStatus, sourceItemIds } });
+                push({
+                    id: "synthetic:reasoning",
+                    role: "tool",
+                    title: "思考摘要",
+                    text: reasoningText,
+                    activityItems: Object.fromEntries(reasoningItems.map((item) => [item.id, item.text])),
+                    detail: { kind: "reasoning", status: reasoningStatus, sourceItemIds },
+                });
                 reasoningAdded = true;
             }
             if (type === "plan") {
                 const text = String(field(item, "text") || "").trim();
                 const error = itemErrorMessage(item);
-                if (text || error) push({ id, role: "tool", title: "执行计划", text: error || text, detail: { kind: "plan", status: itemStatus(item, error), ...(error ? { output: error } : {}) } });
+                if (text || error)
+                    push({
+                        id,
+                        role: "tool",
+                        title: "执行计划",
+                        text: error || text,
+                        detail: {
+                            kind: "plan",
+                            status: itemStatus(item, error),
+                            ...(error ? { output: error } : {}),
+                        },
+                    });
             }
             if (type === "webSearch") {
                 const error = itemErrorMessage(item);
-                push({ id, role: "tool", title: "搜索资料", text: error || webSearchSummary(item), detail: { kind: "search", status: itemStatus(item, error), rows: webSearchRows(item), ...(error ? { output: error } : {}) } });
+                push({
+                    id,
+                    role: "tool",
+                    title: "搜索资料",
+                    text: error || webSearchSummary(item),
+                    detail: {
+                        kind: "search",
+                        status: itemStatus(item, error),
+                        rows: webSearchRows(item),
+                        ...(error ? { output: error } : {}),
+                    },
+                });
             }
             if (type === "imageView") {
                 const error = itemErrorMessage(item);
-                push({ id, role: "tool", title: "查看图片", text: error || String(field(item, "path") || "已查看图片"), detail: { kind: "image", status: itemStatus(item, error), ...(error ? { output: error } : {}) } });
+                push({
+                    id,
+                    role: "tool",
+                    title: "查看图片",
+                    text: error || String(field(item, "path") || "已查看图片"),
+                    detail: {
+                        kind: "image",
+                        status: itemStatus(item, error),
+                        ...(error ? { output: error } : {}),
+                    },
+                });
             }
             if (type === "imageGeneration") {
                 const error = String(field(field(item, "error"), "message") || "");
                 const normalizedStatus = itemStatus(item, error);
-                push({ id, role: "tool", title: "内置生图", text: error || (normalizedStatus === "failed" ? "图片生成失败" : "图片生成完成"), detail: { kind: "image", status: normalizedStatus, savedPath: field(item, "savedPath"), ...(error ? { output: error } : {}) } });
+                push({
+                    id,
+                    role: "tool",
+                    title: "内置生图",
+                    text: error || (normalizedStatus === "failed" ? "图片生成失败" : "图片生成完成"),
+                    detail: {
+                        kind: "image",
+                        status: normalizedStatus,
+                        savedPath: field(item, "savedPath"),
+                        ...(error ? { output: error } : {}),
+                    },
+                });
             }
             if (type === "contextCompaction") {
                 const error = itemErrorMessage(item);
-                push({ id, role: "tool", title: "整理上下文", text: error || "已整理当前对话，继续处理任务", detail: { kind: "context", status: itemStatus(item, error), ...(error ? { output: error } : {}) } });
+                push({
+                    id,
+                    role: "tool",
+                    title: "整理上下文",
+                    text: error || "已整理当前对话，继续处理任务",
+                    detail: {
+                        kind: "context",
+                        status: itemStatus(item, error),
+                        ...(error ? { output: error } : {}),
+                    },
+                });
             }
             if (type === "dynamicToolCall") {
                 const tool = String(field(item, "tool") || "");
                 const title = toolName(tool);
                 const error = itemErrorMessage(item);
-                push({ id, role: "tool", title, text: error || readableText(field(item, "contentItems")), detail: toolHistoryDetail(tool, item, toolArguments(field(item, "arguments")), error) });
+                push({
+                    id,
+                    role: "tool",
+                    title,
+                    text: error || readableText(field(item, "contentItems")),
+                    detail: toolHistoryDetail(tool, item, toolArguments(field(item, "arguments")), error),
+                });
             }
             if (type === "collabToolCall" || type === "collabAgentToolCall") {
                 const error = String(field(field(item, "error"), "message") || "");
                 const normalizedStatus = itemStatus(item, error);
-                push({ id, role: "tool", title: "协作处理", text: error || (normalizedStatus === "failed" ? "协作任务失败" : "已完成协作任务"), detail: { kind: "tool", status: normalizedStatus, ...(error ? { output: error } : {}) } });
+                push({
+                    id,
+                    role: "tool",
+                    title: "协作处理",
+                    text: error || (normalizedStatus === "failed" ? "协作任务失败" : "已完成协作任务"),
+                    detail: {
+                        kind: "tool",
+                        status: normalizedStatus,
+                        ...(error ? { output: error } : {}),
+                    },
+                });
             }
         });
         if (planMessage && !planAdded) messages.push(planMessage);
         if (itemError || turnError) {
             const error = userFacingCodexError(turnError || itemError);
-            push({ id: "synthetic:error", role: "error", title: error.title, text: error.text });
+            push({
+                id: "synthetic:error",
+                role: "error",
+                title: error.title,
+                text: error.text,
+            });
         }
     });
-    return latestCompleteTurns(messages.filter((item) => item.text || item.role === "tool"), 120);
+    return latestCompleteTurns(
+        messages.filter((item) => item.text || item.role === "tool"),
+        120,
+    );
 }
 
 /** 合并标准 turn 与本地终态事件，标准历史已有字段保持优先。 */
@@ -185,7 +337,11 @@ function mergeHistoryTurn(standard: unknown, supplemental: Record<string, unknow
 function mergeHistoryItems(items: unknown[], supplementalItems: CodexSupplementalHistoryItem[]) {
     const supplemental = supplementalItems
         .filter((entry) => entry.itemId)
-        .map((entry, index) => ({ ...entry, item: normalizeSupplementalItem(entry.item), fallbackIndex: index }))
+        .map((entry, index) => ({
+            ...entry,
+            item: normalizeSupplementalItem(entry.item),
+            fallbackIndex: index,
+        }))
         .sort(compareSupplementalEntries);
     items = removeCorruptedHistoryDuplicates(items, supplemental);
     items = reconcileHistoryItemIds(items, supplemental);
@@ -267,12 +423,12 @@ function reconcileHistoryItemIds(items: unknown[], supplementalItems: CodexSuppl
 }
 
 function historyItemType(item: unknown) {
-    const type = String(field(normalizeSupplementalItem(item && typeof item === "object" && !Array.isArray(item) ? item as Record<string, unknown> : {}), "type") || "");
+    const type = String(field(normalizeSupplementalItem(item && typeof item === "object" && !Array.isArray(item) ? (item as Record<string, unknown>) : {}), "type") || "");
     return type;
 }
 
 function hasReplacementCharacter(item: unknown) {
-    const value = item && typeof item === "object" && !Array.isArray(item) ? item as Record<string, unknown> : {};
+    const value = item && typeof item === "object" && !Array.isArray(item) ? (item as Record<string, unknown>) : {};
     return [value.text, value.summary, value.message, value.aggregatedOutput].some((fieldValue) => readableText(fieldValue).includes("\uFFFD"));
 }
 
@@ -289,15 +445,18 @@ function removeCorruptedHistoryDuplicates(items: unknown[], supplementalItems: C
 }
 
 function comparableHistoryText(item: unknown) {
-    const value = item && typeof item === "object" && !Array.isArray(item) ? item as Record<string, unknown> : {};
+    const value = item && typeof item === "object" && !Array.isArray(item) ? (item as Record<string, unknown>) : {};
     const type = historyItemType(value);
     const text = type === "agentMessage" ? value.text : type === "reasoning" ? value.summary : type === "plan" ? value.text : "";
-    return readableText(text).normalize("NFKC").toLocaleLowerCase().replace(/[\uFFFD\p{P}\p{S}\p{Z}]+/gu, "");
+    return readableText(text)
+        .normalize("NFKC")
+        .toLocaleLowerCase()
+        .replace(/[\uFFFD\p{P}\p{S}\p{Z}]+/gu, "");
 }
 
 /** 只使用消息本身的稳定语义字段，不使用状态、结果或临时投影 id。 */
 function historyItemIdentity(item: unknown) {
-    const normalized = normalizeSupplementalItem(item && typeof item === "object" && !Array.isArray(item) ? item as Record<string, unknown> : {});
+    const normalized = normalizeSupplementalItem(item && typeof item === "object" && !Array.isArray(item) ? (item as Record<string, unknown>) : {});
     const type = String(field(normalized, "type") || "");
     let value: unknown;
     if (type === "agentMessage") value = String(field(normalized, "text") || "").trim();
@@ -307,7 +466,8 @@ function historyItemIdentity(item: unknown) {
     else if (type === "commandExecution") value = String(field(normalized, "command") || "").trim();
     else if (type === "fileChange") value = arrayValue(field(normalized, "changes")).map((change) => [field(change, "path"), field(change, "kind")]);
     else if (type === "collabToolCall" || type === "collabAgentToolCall") value = [field(normalized, "tool"), field(normalized, "prompt"), field(normalized, "receiverThreadId"), field(normalized, "receiverAgentId")];
-    else if (type === "webSearch") value = [field(normalized, "query"), field(field(normalized, "action"), "type"), field(field(normalized, "action"), "query"), field(field(normalized, "action"), "url"), field(field(normalized, "action"), "pattern")];
+    else if (type === "webSearch")
+        value = [field(normalized, "query"), field(field(normalized, "action"), "type"), field(field(normalized, "action"), "query"), field(field(normalized, "action"), "url"), field(field(normalized, "action"), "pattern")];
     else if (type === "imageView") value = field(normalized, "path");
     else if (type === "imageGeneration") value = field(normalized, "prompt") || field(normalized, "savedPath");
     else if (type === "contextCompaction") value = true;
@@ -317,7 +477,12 @@ function historyItemIdentity(item: unknown) {
 
 function stableHistoryValue(value: unknown): unknown {
     if (Array.isArray(value)) return value.map(stableHistoryValue);
-    if (value && typeof value === "object") return Object.fromEntries(Object.entries(value).sort(([left], [right]) => left.localeCompare(right)).map(([key, item]) => [key, stableHistoryValue(item)]));
+    if (value && typeof value === "object")
+        return Object.fromEntries(
+            Object.entries(value)
+                .sort(([left], [right]) => left.localeCompare(right))
+                .map(([key, item]) => [key, stableHistoryValue(item)]),
+        );
     return value;
 }
 
@@ -434,7 +599,12 @@ function structuredPlanMessage(update: CodexPlanUpdate, threadId: string): Agent
         role: "tool",
         title: "任务进度",
         text: `已完成 ${completed}/${tasks.length} 项`,
-        detail: { kind: "todo", status: planStatus(tasks, update.turnStatus), tasks, explanation: update.explanation || "" },
+        detail: {
+            kind: "todo",
+            status: planStatus(tasks, update.turnStatus),
+            tasks,
+            explanation: update.explanation || "",
+        },
     };
 }
 
@@ -453,8 +623,15 @@ function planStatus(tasks: Array<{ status: string }>, turnStatus?: string) {
 
 /** 将常见 Codex 错误转换为普通用户可理解的提示。 */
 function userFacingCodexError(message: string) {
-    if (/selected model is at capacity/i.test(message)) return { title: "模型暂时繁忙", text: "当前选择的模型请求量过大，暂时无法处理。请稍后重试，或切换其他模型后再试。" };
-    return { title: "任务失败", text: message || "Codex 未能完成本次任务，请稍后重试。" };
+    if (/selected model is at capacity/i.test(message))
+        return {
+            title: "模型暂时繁忙",
+            text: "当前选择的模型请求量过大，暂时无法处理。请稍后重试，或切换其他模型后再试。",
+        };
+    return {
+        title: "任务失败",
+        text: message || "Codex 未能完成本次任务，请稍后重试。",
+    };
 }
 
 /** 提取用户输入条目中的文本与附件占位信息。 */
@@ -498,17 +675,23 @@ function commandDetail(item: unknown) {
     const status = String(field(item, "status") || "completed");
     const exitCode = field(item, "exitCode");
     const failed = Boolean(error) || field(item, "success") === false || status === "failed" || status === "error" || (typeof exitCode === "number" && exitCode !== 0);
-    const rows = [
-        textRow("工作目录", field(item, "cwd")),
-        textRow("退出状态", exitCode),
-        durationRow(field(item, "durationMs")),
-    ].filter(Boolean);
-    return { kind: "command", status: failed ? "failed" : status, rows, output: error || String(field(item, "aggregatedOutput") || "").trim() };
+    const rows = [textRow("工作目录", field(item, "cwd")), textRow("退出状态", exitCode), durationRow(field(item, "durationMs"))].filter(Boolean);
+    return {
+        kind: "command",
+        status: failed ? "failed" : status,
+        rows,
+        output: error || String(field(item, "aggregatedOutput") || "").trim(),
+    };
 }
 
 /** 生成 MCP 工具的用户可读详情。 */
 function toolHistoryDetail(tool: string, item: unknown, input: unknown, error: string) {
-    return { kind: "tool", status: itemStatus(item, error), rows: toolInputRows(tool, input), ...(error ? { output: error } : {}) };
+    return {
+        kind: "tool",
+        status: itemStatus(item, error),
+        rows: toolInputRows(tool, input),
+        ...(error ? { output: error } : {}),
+    };
 }
 
 function itemErrorMessage(item: unknown) {
@@ -557,12 +740,11 @@ function canvasContentSummary(nodes: unknown[], connections: number) {
         result[type] = (result[type] || 0) + 1;
         return result;
     }, {});
-    const known = new Set(["text", "image", "config", "video", "audio", "group"]);
+    const known = new Set(["text", "image", "video", "audio", "group"]);
     const other = Object.entries(counts).reduce((total, [type, count]) => total + (known.has(type) ? 0 : count), 0);
     const parts = [
         counts.text ? `${counts.text} 个文本` : "",
         counts.image ? `${counts.image} 张图片` : "",
-        counts.config ? `${counts.config} 个配置` : "",
         counts.video ? `${counts.video} 个视频` : "",
         counts.audio ? `${counts.audio} 个音频` : "",
         counts.group ? `${counts.group} 个分组` : "",
@@ -602,7 +784,9 @@ function summarizeCanvasOps(ops: unknown[]) {
         if (type) result[type] = (result[type] || 0) + 1;
         return result;
     }, {});
-    return Object.entries(counts).map(([type, count]) => `${canvasOpLabel(type)} ${count}`).join("，");
+    return Object.entries(counts)
+        .map(([type, count]) => `${canvasOpLabel(type)} ${count}`)
+        .join("，");
 }
 
 function canvasOpLabel(type: string) {
@@ -712,7 +896,6 @@ function toolName(name: string) {
     if (name === "canvas_create_attachment_nodes") return "添加附件图片";
     if (name === "canvas_create_text_node") return "创建文本";
     if (name === "canvas_create_text_nodes") return "批量创建文本";
-    if (name === "canvas_create_config_node") return "创建生成配置";
     if (name === "canvas_create_image_prompt_flow") return "创建生图流程";
     if (name === "canvas_create_generation_flow") return "创建生成流程";
     if (name === "canvas_generate_text") return "生成文本";

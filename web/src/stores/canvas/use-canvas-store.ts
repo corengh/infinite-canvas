@@ -8,6 +8,7 @@ import { canvasSessionId } from "@/platform/canvas/session";
 import { canvasSync } from "@/platform/canvas/sync-engine";
 import { createCanvasCacheStorage } from "@/platform/canvas/storage";
 import { ApiError } from "@/platform/http/errors";
+import { useConfigStore } from "@/stores/use-config-store";
 import type { CanvasAssistantSession, CanvasConnection, CanvasNodeData, ViewportTransform } from "@/types/canvas";
 
 export type CanvasProject = {
@@ -59,7 +60,7 @@ export const useCanvasStore = create<CanvasStore>()(
                     connections: [],
                     chatSessions: [],
                     activeChatId: null,
-                    backgroundMode: "lines",
+                    backgroundMode: useConfigStore.getState().config.canvasBackground,
                     showImageInfo: false,
                     viewport: initialViewport,
                 };

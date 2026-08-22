@@ -38,9 +38,13 @@ export function PromptSourceContentModal({ source, onClose }: { source: PromptSo
         else setItems([]);
     }, [source, load]);
 
-    const saveAsset = (item: Prompt) => {
-        addAsset({ kind: "text", title: item.title, coverUrl: item.coverUrl, tags: item.tags, source: item.category, data: { content: item.prompt }, metadata: { source: "prompt-library", promptId: item.id, githubUrl: item.githubUrl } });
-        message.success(t("common.addedToAssets"));
+    const saveAsset = async (item: Prompt) => {
+        try {
+            await addAsset({ kind: "text", title: item.title, coverUrl: item.coverUrl, tags: item.tags, source: item.category, data: { content: item.prompt }, metadata: { source: "prompt-library", promptId: item.id, githubUrl: item.githubUrl } });
+            message.success(t("common.addedToAssets"));
+        } catch (error) {
+            message.error(error instanceof Error ? error.message : t("fe9.assets.uploadFailed"));
+        }
     };
 
     return (

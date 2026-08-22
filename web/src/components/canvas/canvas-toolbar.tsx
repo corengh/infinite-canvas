@@ -20,7 +20,6 @@ export function CanvasToolbar({
     onAddVideo,
     onAddAudio,
     onAddText,
-    onAddConfig,
     onAddGroup,
     onAddExtensionNode,
     onUndo,
@@ -42,7 +41,6 @@ export function CanvasToolbar({
     onAddVideo: () => void;
     onAddAudio: () => void;
     onAddText: () => void;
-    onAddConfig: () => void;
     onAddGroup: () => void;
     onAddExtensionNode: (type: string) => void;
     onUndo: () => void;
@@ -91,7 +89,18 @@ export function CanvasToolbar({
         <div ref={rootRef} className="pointer-events-none absolute bottom-5 z-50 flex justify-center" style={{ left: 300, right: 16 }}>
             {tip ? <DockTip label={tip} x={tipX} theme={theme} /> : null}
             <div ref={wrapRef} className="thin-scrollbar pointer-events-auto flex h-14 max-w-full items-center gap-1 overflow-x-auto rounded-xl border px-2 shadow-lg backdrop-blur [&>*]:shrink-0" style={dockStyle}>
-                <ToolbarButton id={`tool-${canvasTool}`} label={t(`canvas.toolbar.${canvasTool}`)} active hovered={hovered} activeStyle={activeStyle} hoverStyle={hoverStyle} wrapRef={wrapRef} onTipX={setTipX} onHover={setHovered} onClick={() => onCanvasToolChange(canvasTool === "select" ? "pan" : "select")}>
+                <ToolbarButton
+                    id={`tool-${canvasTool}`}
+                    label={t(`canvas.toolbar.${canvasTool}`)}
+                    active
+                    hovered={hovered}
+                    activeStyle={activeStyle}
+                    hoverStyle={hoverStyle}
+                    wrapRef={wrapRef}
+                    onTipX={setTipX}
+                    onHover={setHovered}
+                    onClick={() => onCanvasToolChange(canvasTool === "select" ? "pan" : "select")}
+                >
                     {canvasTool === "select" ? <MousePointer2 className="size-4.5" /> : <Hand className="size-4.5" />}
                 </ToolbarButton>
                 <ToolbarButton id="tool-undo" label={t("canvas.undo")} disabled={!canUndo} hovered={hovered} hoverStyle={hoverStyle} wrapRef={wrapRef} onTipX={setTipX} onHover={setHovered} onClick={onUndo}>
@@ -112,9 +121,6 @@ export function CanvasToolbar({
                 </ToolbarButton>
                 <ToolbarButton id="tool-audio" label={t("canvas.toolbar.audio")} hovered={hovered} hoverStyle={hoverStyle} wrapRef={wrapRef} onTipX={setTipX} onHover={setHovered} onClick={onAddAudio}>
                     <Music2 className="size-4.5" />
-                </ToolbarButton>
-                <ToolbarButton id="tool-config" label={t("canvas.toolbar.config")} hovered={hovered} hoverStyle={hoverStyle} wrapRef={wrapRef} onTipX={setTipX} onHover={setHovered} onClick={onAddConfig}>
-                    <Settings2 className="size-4.5" />
                 </ToolbarButton>
                 <ToolbarButton id="tool-group" label={t("canvas.toolbar.group")} hovered={hovered} hoverStyle={hoverStyle} wrapRef={wrapRef} onTipX={setTipX} onHover={setHovered} onClick={onAddGroup}>
                     <Group className="size-4.5" />
@@ -232,7 +238,8 @@ export function CanvasToolbar({
                                 value: "dots",
                                 label: (
                                     <span className="inline-flex items-center gap-1.5">
-                                        <CircleDot className="size-4" />{t("canvas.toolbar.dots")}
+                                        <CircleDot className="size-4" />
+                                        {t("canvas.toolbar.dots")}
                                     </span>
                                 ),
                             },
@@ -240,7 +247,8 @@ export function CanvasToolbar({
                                 value: "lines",
                                 label: (
                                     <span className="inline-flex items-center gap-1.5">
-                                        <Grid2x2 className="size-4" />{t("canvas.toolbar.lines")}
+                                        <Grid2x2 className="size-4" />
+                                        {t("canvas.toolbar.lines")}
                                     </span>
                                 ),
                             },
@@ -360,7 +368,6 @@ function toolLabel(id: string, t: (key: string) => string) {
     if (id === "tool-image") return t("canvas.toolbar.image");
     if (id === "tool-video") return t("canvas.toolbar.video");
     if (id === "tool-audio") return t("canvas.toolbar.audio");
-    if (id === "tool-config") return t("canvas.toolbar.config");
     if (id === "tool-group") return t("canvas.toolbar.group");
     if (id === "tool-extensions") return t("canvas.toolbar.extensions");
     if (id === "tool-upload") return t("canvas.toolbar.upload");

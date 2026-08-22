@@ -6,7 +6,10 @@ import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 import { useAssetStore, type Asset } from "@/stores/use-asset-store";
 
-export type InsertAssetPayload = { kind: "text"; content: string; title: string } | { kind: "image"; dataUrl: string; title: string; storageKey?: string } | { kind: "video"; url: string; title: string; storageKey?: string; width?: number; height?: number };
+export type InsertAssetPayload =
+    | { kind: "text"; content: string; title: string }
+    | { kind: "image"; assetId?: string; dataUrl: string; title: string; storageKey?: string }
+    | { kind: "video"; assetId?: string; url: string; title: string; storageKey?: string; width?: number; height?: number };
 
 type Props = {
     open: boolean;
@@ -47,7 +50,9 @@ function PickerCard({ title, kind, cover, onClick }: { title: string; kind: stri
                     <Tag className="m-0 shrink-0 text-[10px]">{t(`assets.kinds.${kind}`)}</Tag>
                 </div>
             </div>
-            <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-stone-950/0 text-sm font-medium text-white opacity-0 transition group-hover:bg-stone-950/55 group-hover:opacity-100">{t("canvas.assetPicker.insert")}</div>
+            <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-stone-950/0 text-sm font-medium text-white opacity-0 transition group-hover:bg-stone-950/55 group-hover:opacity-100">
+                {t("canvas.assetPicker.insert")}
+            </div>
         </button>
     );
 }
@@ -55,14 +60,19 @@ function PickerCard({ title, kind, cover, onClick }: { title: string; kind: stri
 function MyAssetsTab({ onInsert }: { onInsert: (payload: InsertAssetPayload) => void }) {
     const { t } = useTranslation();
     const assets = useAssetStore((state) => state.assets);
+    const loadAssets = useAssetStore((state) => state.loadAssets);
     const [keyword, setKeyword] = useState("");
     const [kindFilter, setKindFilter] = useState("all");
     const [page, setPage] = useState(1);
 
+    useEffect(() => {
+        void loadAssets({ limit: 100 });
+    }, [loadAssets]);
+
     const filtered = useMemo(() => {
         const query = keyword.trim().toLowerCase();
         return assets
-            .filter((a) => a.kind === "text" || a.kind === "image" || a.kind === "video")
+            .filter((a): a is Extract<Asset, { kind: "text" | "image" | "video" }> => a.kind === "text" || a.kind === "image" || a.kind === "video")
             .filter((a) => kindFilter === "all" || a.kind === kindFilter)
             .filter((a) => !query || [a.title, ...(a.tags || [])].join(" ").toLowerCase().includes(query));
     }, [assets, keyword, kindFilter]);
@@ -74,11 +84,15 @@ function MyAssetsTab({ onInsert }: { onInsert: (payload: InsertAssetPayload) => 
         setPage((v) => Math.min(v, maxPage));
     }, [filtered.length]);
 
-    const handleInsert = (asset: Asset) => {
+    const handleInsert = (asset: Extract<Asset, { kind: "text" | "image" | "video" }>) => {
         if (asset.kind === "text") {
             onInsert({ kind: "text", content: asset.data.content, title: asset.title });
         } else {
-            onInsert(asset.kind === "video" ? { kind: "video", url: asset.data.url, storageKey: asset.data.storageKey, title: asset.title, width: asset.data.width, height: asset.data.height } : { kind: "image", dataUrl: asset.data.dataUrl, storageKey: asset.data.storageKey, title: asset.title });
+            onInsert(
+                asset.kind === "video"
+                    ? { kind: "video", assetId: asset.id, url: asset.data.url, storageKey: asset.data.storageKey, title: asset.title, width: asset.data.width, height: asset.data.height }
+                    : { kind: "image", assetId: asset.id, dataUrl: asset.data.dataUrl, storageKey: asset.data.storageKey, title: asset.title },
+            );
         }
     };
 

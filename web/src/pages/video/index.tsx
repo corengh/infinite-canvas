@@ -277,17 +277,21 @@ export default function VideoPage() {
         saveAs(video.url, "video.mp4");
     };
 
-    const saveResultToAssets = (video: GeneratedVideo) => {
-        addAsset({
-            kind: "video",
-            title: t("videoWorkbench.resultTitle"),
-            coverUrl: "",
-            tags: [],
-            source: t("videoWorkbench.source"),
-            data: { url: video.url, storageKey: video.storageKey, width: video.width, height: video.height, bytes: video.bytes, mimeType: video.mimeType },
-            metadata: { source: "video-page", prompt },
-        });
-        message.success(t("common.addedToAssets"));
+    const saveResultToAssets = async (video: GeneratedVideo) => {
+        try {
+            await addAsset({
+                kind: "video",
+                title: t("videoWorkbench.resultTitle"),
+                coverUrl: "",
+                tags: [],
+                source: t("videoWorkbench.source"),
+                data: { url: video.url, storageKey: video.storageKey, width: video.width, height: video.height, bytes: video.bytes, mimeType: video.mimeType },
+                metadata: { source: "video-page", prompt },
+            });
+            message.success(t("common.addedToAssets"));
+        } catch (error) {
+            message.error(error instanceof Error ? error.message : t("fe9.assets.uploadFailed"));
+        }
     };
 
     const insertPickedAsset = async (payload: InsertAssetPayload) => {

@@ -35,7 +35,11 @@ export const authApi = {
     resetPassword: (phone: string, smsCode: string, newPassword: string) => api.post<{ ok: boolean }>("/auth/password/reset", { phone: phone.trim(), sms_code: smsCode.trim(), new_password: newPassword }, { auth: "public" }),
     logout: () => api.post<{ ok: boolean }>("/auth/logout"),
     updateMe: (input: { display_name?: string; email?: string | null; avatar_url?: string }) => api.patch<UserDTO>("/me", input),
-    updatePreferences: (input: { default_models?: Partial<Record<"text2image" | "image2image" | "text2video" | "image2video" | "text" | "audio", string>> }) => api.patch<Record<string, unknown>>("/me/preferences", input),
+    updatePreferences: (input: {
+        default_models?: Partial<Record<"text2image" | "image2image" | "text2video" | "image2video" | "text" | "audio", string | null>>;
+        generation_defaults?: { size?: string; resolution?: string; quality?: string };
+        ui?: { theme?: "light" | "dark"; lang?: "zh-CN" | "en-US"; canvasBackground?: "dots" | "lines" | "blank" };
+    }) => api.patch<Record<string, unknown>>("/me/preferences", input),
     changePassword: (oldPassword: string, newPassword: string) => api.post<{ ok: boolean }>("/me/password", { old_password: oldPassword, new_password: newPassword }),
     bindPhoneCode: (phone: string, captchaId: string, captchaCode: string) => api.post<SendCodeResult>("/me/phone/bind/code", { phone: phone.trim(), captcha_id: captchaId, captcha_code: captchaCode.trim() }),
     bindPhone: (phone: string, smsCode: string) => api.post<{ phone: string; phone_verified: boolean }>("/me/phone/bind", { phone: phone.trim(), sms_code: smsCode.trim() }),

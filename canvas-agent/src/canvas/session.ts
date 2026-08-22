@@ -8,8 +8,21 @@ import type { ToolName } from "./schemas.js";
 import { compactCanvasState, compactNode, isToolName, nextCanvasX, parseToolInput } from "./tools.js";
 import type { CanvasSnapshot } from "./types.js";
 
-type PendingRequest = { clientId: string; resolve: (value: unknown) => void; reject: (error: Error) => void };
-type TurnAttachment = { clientId: string; id: string; name: string; type: string; size: number; width: number; height: number; dataUrl: string };
+type PendingRequest = {
+    clientId: string;
+    resolve: (value: unknown) => void;
+    reject: (error: Error) => void;
+};
+type TurnAttachment = {
+    clientId: string;
+    id: string;
+    name: string;
+    type: string;
+    size: number;
+    width: number;
+    height: number;
+    dataUrl: string;
+};
 type ReplayEvent = { type: string; payload: Record<string, unknown> };
 export type CodexState = { busy: boolean; threadId: string; turnId: string };
 export type McpStartupState = "starting" | "ready" | "failed" | "cancelled";
@@ -18,12 +31,20 @@ export type ConversationState = {
     conversationId: string;
     threadId: string;
     status: "idle" | "preparing" | "ready" | "warning" | "running" | "failed";
-    mcpStatuses: Record<string, { status: McpStartupState; error?: string | null; failureReason?: string | null }>;
+    mcpStatuses: Record<
+        string,
+        {
+            status: McpStartupState;
+            error?: string | null;
+            failureReason?: string | null;
+        }
+    >;
     sourceClientId?: string;
     error?: string;
 };
 type McpInventoryItem = { name: string; authStatus?: string };
-export const AGENT_PROTOCOL_VERSION = 6;
+// 工具集合移除配置节点属于不兼容变更，提升协议版本让旧前端明确拒绝连接。
+export const AGENT_PROTOCOL_VERSION = 7;
 
 const SITE_TOOLS = new Set<ToolName>([
     "site_navigate",
@@ -79,7 +100,14 @@ export class CanvasSession {
 
     /** 返回 Canvas Agent 当前连接状态。 */
     health() {
-        return { ok: true, protocolVersion: AGENT_PROTOCOL_VERSION, hasCanvas: Boolean(this.canvasState), clients: this.clients.size, codexBusy: this.codexState.busy, conversation: this.conversationStateSnapshot };
+        return {
+            ok: true,
+            protocolVersion: AGENT_PROTOCOL_VERSION,
+            hasCanvas: Boolean(this.canvasState),
+            clients: this.clients.size,
+            codexBusy: this.codexState.busy,
+            conversation: this.conversationStateSnapshot,
+        };
     }
 
     /** 返回 Codex 是否正在执行任务。 */
@@ -98,11 +126,20 @@ export class CanvasSession {
 
     /** 返回站点级对话的权威快照。 */
     get conversationStateSnapshot(): ConversationState {
-        return { ...this.conversationState, mcpStatuses: { ...this.conversationState.mcpStatuses } };
+        return {
+            ...this.conversationState,
+            mcpStatuses: { ...this.conversationState.mcpStatuses },
+        };
     }
 
     /** 原子开始一次新建或恢复对话流程。 */
-    beginConversation(options: { threadId?: string; conversationId?: string; sourceClientId?: string } = {}) {
+    beginConversation(
+        options: {
+            threadId?: string;
+            conversationId?: string;
+            sourceClientId?: string;
+        } = {},
+    ) {
         this.conversationInventoryComplete = false;
         this.preparedConversationThreadId = "";
         return this.updateConversation({
@@ -119,24 +156,32 @@ export class CanvasSession {
     updateConversationMcp(name: string, status: McpStartupState, error?: string | null, failureReason?: string | null) {
         if (!name || this.conversationState.status !== "preparing") return this.conversationStateSnapshot;
         const snapshot = this.updateConversation({
-            mcpStatuses: { ...this.conversationState.mcpStatuses, [name]: { status, error, failureReason } },
+            mcpStatuses: {
+                ...this.conversationState.mcpStatuses,
+                [name]: { status, error, failureReason },
+            },
         });
-        return this.conversationInventoryComplete && this.preparedConversationThreadId
-            ? this.completeConversationPreparation(this.preparedConversationThreadId)
-            : snapshot;
+        return this.conversationInventoryComplete && this.preparedConversationThreadId ? this.completeConversationPreparation(this.preparedConversationThreadId) : snapshot;
     }
 
     /** 用 app-server 的完整 MCP 清单补齐未发送逐项通知的服务。 */
     completeConversationMcpInventory(services: McpInventoryItem[]) {
         if (this.conversationState.status !== "preparing") return this.conversationStateSnapshot;
         const mcpStatuses = { ...this.conversationState.mcpStatuses };
-        services.filter((item) => item.name).forEach((item) => {
-            const current = mcpStatuses[item.name];
-            if (current?.status === "failed" || current?.status === "cancelled") return;
-            mcpStatuses[item.name] = item.authStatus === "notLoggedIn"
-                ? { status: "failed", error: "MCP 服务未登录", failureReason: "reauthenticationRequired" }
-                : { status: "ready" };
-        });
+        services
+            .filter((item) => item.name)
+            .forEach((item) => {
+                const current = mcpStatuses[item.name];
+                if (current?.status === "failed" || current?.status === "cancelled") return;
+                mcpStatuses[item.name] =
+                    item.authStatus === "notLoggedIn"
+                        ? {
+                              status: "failed",
+                              error: "MCP 服务未登录",
+                              failureReason: "reauthenticationRequired",
+                          }
+                        : { status: "ready" };
+            });
         this.conversationInventoryComplete = true;
         return this.updateConversation({ mcpStatuses });
     }
@@ -185,7 +230,9 @@ export class CanvasSession {
     finishConversationRun(threadId: string) {
         if (!threadId || threadId !== this.conversationState.threadId) return this.conversationStateSnapshot;
         const hasFailure = Object.values(this.conversationState.mcpStatuses).some((item) => item.status === "failed" || item.status === "cancelled");
-        return this.updateConversation({ status: hasFailure ? "warning" : "ready" });
+        return this.updateConversation({
+            status: hasFailure ? "warning" : "ready",
+        });
     }
 
     /** 判断网页客户端是否仍连接到当前 Agent。 */
@@ -270,7 +317,11 @@ export class CanvasSession {
         const clientId = url.searchParams.get("clientId") || crypto.randomUUID();
         const statusOnly = url.searchParams.get("role") === "status";
         logger.info("SSE client connected", { clientId, statusOnly });
-        res.writeHead(200, { "Content-Type": "text/event-stream", "Cache-Control": "no-cache", Connection: "keep-alive" });
+        res.writeHead(200, {
+            "Content-Type": "text/event-stream",
+            "Cache-Control": "no-cache",
+            Connection: "keep-alive",
+        });
         if (!statusOnly) {
             this.clients.set(clientId, res);
             if (!this.clientFocusOrder.has(clientId)) this.clientFocusOrder.set(clientId, 0);
@@ -279,7 +330,15 @@ export class CanvasSession {
                 this.clientFocusOrder.set(clientId, ++this.focusSequence);
             }
         }
-        sendEvent(res, "hello", { ok: true, protocolVersion: AGENT_PROTOCOL_VERSION, clientId, workspace: { activeThreadId }, conversation: this.conversationStateSnapshot, codex: this.codexState, pendingApprovals: this.codexPendingApprovals });
+        sendEvent(res, "hello", {
+            ok: true,
+            protocolVersion: AGENT_PROTOCOL_VERSION,
+            clientId,
+            workspace: { activeThreadId },
+            conversation: this.conversationStateSnapshot,
+            codex: this.codexState,
+            pendingApprovals: this.codexPendingApprovals,
+        });
         if (!statusOnly && activeThreadId && this.codexState.threadId === activeThreadId) this.codexReplayEvents.forEach((event) => sendEvent(res, event.type, event.payload));
         const timer = setInterval(() => sendEvent(res, "ping", { time: Date.now() }), 15000);
         res.on("close", () => {
@@ -299,7 +358,11 @@ export class CanvasSession {
     }
 
     private updateConversation(patch: Partial<Omit<ConversationState, "revision">>) {
-        this.conversationState = { ...this.conversationState, ...patch, revision: this.conversationState.revision + 1 };
+        this.conversationState = {
+            ...this.conversationState,
+            ...patch,
+            revision: this.conversationState.revision + 1,
+        };
         const snapshot = this.conversationStateSnapshot;
         this.emitAll("conversation_changed", snapshot);
         return snapshot;
@@ -309,9 +372,16 @@ export class CanvasSession {
     updateState(body: unknown, clientId?: string) {
         const targetClientId = clientId || this.activeClientId;
         if (!targetClientId || !this.clients.has(targetClientId)) return;
-        const state = { ...((body && typeof body === "object" && !Array.isArray(body) ? body : {}) as Record<string, unknown>), clientId: targetClientId } as CanvasSnapshot;
+        const state = {
+            ...((body && typeof body === "object" && !Array.isArray(body) ? body : {}) as Record<string, unknown>),
+            clientId: targetClientId,
+        } as CanvasSnapshot;
         this.canvasStates.set(targetClientId, state);
-        logger.debug("Canvas state updated", { clientId: targetClientId, nodes: state.nodes?.length || 0, connections: state.connections?.length || 0 });
+        logger.debug("Canvas state updated", {
+            clientId: targetClientId,
+            nodes: state.nodes?.length || 0,
+            connections: state.connections?.length || 0,
+        });
     }
 
     /** 将指定网页设为最近激活的工具目标。 */
@@ -352,7 +422,16 @@ export class CanvasSession {
                 dataUrl: item.dataUrl,
             };
             this.turnAttachments.set(id, attachment);
-            return [{ id, name: attachment.name, type: attachment.type, size: attachment.size, width: attachment.width, height: attachment.height }];
+            return [
+                {
+                    id,
+                    name: attachment.name,
+                    type: attachment.type,
+                    size: attachment.size,
+                    width: attachment.width,
+                    height: attachment.height,
+                },
+            ];
         });
     }
 
@@ -376,7 +455,12 @@ export class CanvasSession {
         const item = body.requestId ? this.pending.get(body.requestId) : null;
         if (!item || !body.requestId || item.clientId !== clientId) return false;
         this.pending.delete(body.requestId);
-        logger.debug("Canvas tool result received", { clientId, requestId: body.requestId, error: body.error, result: body.result });
+        logger.debug("Canvas tool result received", {
+            clientId,
+            requestId: body.requestId,
+            error: body.error,
+            result: body.result,
+        });
         body.error ? item.reject(new Error(body.error)) : item.resolve(body.result);
         return true;
     }
@@ -399,7 +483,10 @@ export class CanvasSession {
             if (type === "agent_event" && item.id && eventType === "item.completed") this.codexReplayActiveItems.delete(replayKey);
             if (type === "agent_event" && (eventType === "turn.completed" || eventType === "error")) this.clearReplayActiveTurn(threadId, eventTurnId);
             const replayData = this.replaySnapshot(replayKey, data);
-            this.codexReplayEvents.set(replayKey, { type, payload: { ...replayData, replayed: true } });
+            this.codexReplayEvents.set(replayKey, {
+                type,
+                payload: { ...replayData, replayed: true },
+            });
             while (this.codexReplayEvents.size > 240) {
                 const evictable = [...this.codexReplayEvents.keys()].find((key) => !this.codexReplayActiveItems.has(key));
                 if (!evictable) break;
@@ -419,7 +506,10 @@ export class CanvasSession {
         if (!delta) return data;
         const previousText = String(previous.text || "");
         const { delta: _delta, ...snapshotItem } = item;
-        return { ...data, item: { ...previous, ...snapshotItem, text: `${previousText}${delta}` } };
+        return {
+            ...data,
+            item: { ...previous, ...snapshotItem, text: `${previousText}${delta}` },
+        };
     }
 
     private clearReplayActiveTurn(threadId: string, turnId: string) {
@@ -439,7 +529,11 @@ export class CanvasSession {
     /** 校验工具参数并将调用分派到当前目标网页。 */
     async callTool(name: unknown, rawInput: unknown) {
         if (!isToolName(name)) throw new Error(`未知工具：${String(name)}`);
-        logger.info("MCP tool called", { name, input: rawInput, targetClientId: this.targetClientId });
+        logger.info("MCP tool called", {
+            name,
+            input: rawInput,
+            targetClientId: this.targetClientId,
+        });
         const input = parseToolInput(name, rawInput) as Record<string, unknown>;
         if (SITE_TOOLS.has(name)) {
             if (!this.clients.size) throw new Error("当前没有已连接网页");
@@ -450,9 +544,20 @@ export class CanvasSession {
         if (name === "canvas_get_state" || name === "canvas_export_snapshot") return compactCanvasState(this.canvasState);
         if (name === "canvas_get_selection") {
             const ids = new Set(this.canvasState?.selectedNodeIds || []);
-            return { nodes: (this.canvasState?.nodes || []).filter((node) => ids.has(node.id)).map(compactNode) };
+            return {
+                nodes: (this.canvasState?.nodes || []).filter((node) => ids.has(node.id)).map(compactNode),
+            };
         }
-        if (name === "canvas_create_attachment_nodes") return await this.createAttachmentNodes(input as { attachmentIds: string[]; x?: number; y?: number; gap?: number; direction?: "row" | "column" });
+        if (name === "canvas_create_attachment_nodes")
+            return await this.createAttachmentNodes(
+                input as {
+                    attachmentIds: string[];
+                    x?: number;
+                    y?: number;
+                    gap?: number;
+                    direction?: "row" | "column";
+                },
+            );
         if (!this.clients.size) throw new Error("当前没有已连接画布");
         const request = buildCanvasToolRequest(name, input, this.canvasState);
         return await this.requestCanvasTool(request.name, request.input);
@@ -474,7 +579,10 @@ export class CanvasSession {
                 id: `image-${crypto.randomUUID()}`,
                 attachmentId: attachment.id,
                 title: attachment.name,
-                position: { x: direction === "row" ? x + offset : x, y: direction === "column" ? y + offset : y },
+                position: {
+                    x: direction === "row" ? x + offset : x,
+                    y: direction === "column" ? y + offset : y,
+                },
                 width: size.width,
                 height: size.height,
             };
@@ -482,7 +590,13 @@ export class CanvasSession {
             return node;
         });
         await this.requestCanvasTool("canvas_create_attachment_nodes", { nodes });
-        return { nodes: nodes.map(({ id, attachmentId, title }) => ({ id, attachmentId, title })) };
+        return {
+            nodes: nodes.map(({ id, attachmentId, title }) => ({
+                id,
+                attachmentId,
+                title,
+            })),
+        };
     }
 
     /** 向目标网页发送工具请求并等待调用结果。 */
@@ -492,14 +606,27 @@ export class CanvasSession {
         const client = this.clients.get(clientId);
         if (!client) throw new Error("当前没有已连接画布");
         sendEvent(client, "tool_call", { requestId, name, input });
-        logger.debug("Canvas tool request sent", { requestId, name, input, clientId });
+        logger.debug("Canvas tool request sent", {
+            requestId,
+            name,
+            input,
+            clientId,
+        });
         return await new Promise((resolve, reject) => {
             const timer = setTimeout(() => {
                 this.pending.delete(requestId);
-                logger.warn("Canvas tool request timed out", { requestId, name, clientId });
+                logger.warn("Canvas tool request timed out", {
+                    requestId,
+                    name,
+                    clientId,
+                });
                 reject(new Error("画布操作超时"));
             }, 30000);
-            this.pending.set(requestId, { clientId, resolve: (value) => (clearTimeout(timer), resolve(value)), reject: (error) => (clearTimeout(timer), reject(error)) });
+            this.pending.set(requestId, {
+                clientId,
+                resolve: (value) => (clearTimeout(timer), resolve(value)),
+                reject: (error) => (clearTimeout(timer), reject(error)),
+            });
         });
     }
 }
@@ -526,7 +653,7 @@ function codexReplayKey(type: string, payload: Record<string, unknown>) {
 }
 
 function recordValue(value: unknown) {
-    return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+    return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
 }
 
 /** 向 SSE 连接写入一个事件。 */

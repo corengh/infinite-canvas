@@ -1,7 +1,7 @@
 import { uploadGenerationReference } from "@/platform/api/assets";
 import { cancelTask, generationErrorText, submitGeneration, trackTask, type GenerationEstimateInput, type GenerationOutput, type GenerationTask, type TrackTaskProgress } from "@/platform/api/generation";
 import { withCreditBadgeRefresh } from "@/platform/components/credit-badge";
-import type { AiConfig } from "@/stores/use-config-store";
+import type { AiConfig, PlatformModelCapability } from "@/stores/use-config-store";
 import { runConfirmedGeneration } from "./confirmed-submit";
 import { resolveGenerationModelParams } from "./model-params";
 
@@ -43,14 +43,22 @@ const VIDEO_RATIO_SIZES: Record<string, string> = {
     "21:9": "1344x576",
 };
 
-export function platformModelCode(config: AiConfig, capability: "image" | "video" | "text"): string {
-    const selected = config.model || (capability === "image" ? config.imageModel : capability === "video" ? config.videoModel : config.textModel);
+export function platformModelCode(config: AiConfig, capability: PlatformModelCapability): string {
+    // 兼容旧画布/测试快照：新增字段尚未写入的文档按“没有六类默认值”处理。
+    const defaultModels = config.defaultModels || {};
+    const family = capability === "text2image" || capability === "image2image" ? "image" : capability === "text2video" || capability === "image2video" ? "video" : capability;
+    const familyModel = family === "image" ? config.imageModel : family === "video" ? config.videoModel : family === "audio" ? config.audioModel : config.textModel;
+    const familyDefault = family === "image" ? defaultModels.text2image : family === "video" ? defaultModels.text2video : defaultModels[family];
+    // 节点显式模型、工作台手工选择依次优先；仍在使用族默认值时才切到本次真实能力的默认模型。
+    const explicitNodeModel = config.model && config.model !== familyModel ? config.model : "";
+    const explicitFamilyModel = familyModel && familyModel !== familyDefault ? familyModel : "";
+    const selected = explicitNodeModel || explicitFamilyModel || defaultModels[capability] || familyModel || config.model;
     return selected.includes("::") ? selected.slice(selected.lastIndexOf("::") + 2) : selected;
 }
 
 /** 保持旧 service 签名时，将现有界面配置收敛为模型目录声明的平台图片参数。 */
 export async function imageGenerationInput(config: AiConfig, prompt: string, count: number, capability: "text2image" | "image2image", referenceIds: string[] = []): Promise<GenerationEstimateInput> {
-    const resolved = await resolveGenerationModelParams(platformModelCode(config, "image"), capability, {
+    const resolved = await resolveGenerationModelParams(platformModelCode(config, capability), capability, {
         quality: config.quality === "auto" ? undefined : config.quality,
         size: IMAGE_RATIO_SIZES[config.size] ?? config.size,
         ...config.generationParams,
@@ -68,7 +76,7 @@ export async function imageGenerationInput(config: AiConfig, prompt: string, cou
 export async function videoGenerationInput(config: AiConfig, prompt: string, capability: "text2video" | "image2video", referenceIds: string[] = []): Promise<GenerationEstimateInput> {
     const legacyQuality = config.vquality.replace(/p$/i, "");
     const quality = ["low", "medium", "high"].includes(config.quality) ? config.quality : legacyQuality === "480" ? "low" : legacyQuality === "1080" ? "high" : "medium";
-    const resolved = await resolveGenerationModelParams(platformModelCode(config, "video"), capability, {
+    const resolved = await resolveGenerationModelParams(platformModelCode(config, capability), capability, {
         seconds: Math.max(1, Math.floor(Number(config.videoSeconds) || 1)),
         size: VIDEO_RATIO_SIZES[config.size] ?? config.size,
         quality,

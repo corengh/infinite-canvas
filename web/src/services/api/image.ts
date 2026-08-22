@@ -54,11 +54,11 @@ export async function requestImageQuestion(config: AiConfig, messages: AiTextMes
     return text;
 }
 
-export async function fetchImageModels(_config: Pick<AiConfig, "baseUrl" | "apiKey" | "apiFormat">) {
+export async function fetchImageModels(_config?: Pick<AiConfig, "apiFormat">) {
     const result = await modelsApi.list();
     return result.items.filter((model) => model.capabilities.some((capability) => capability === "text2image" || capability === "image2image")).map((model) => model.code);
 }
 
 export async function fetchChannelModels(_channel: ModelChannel) {
-    return fetchImageModels({ baseUrl: "", apiKey: "", apiFormat: "openai" });
+    return fetchImageModels({ apiFormat: "openai" });
 }

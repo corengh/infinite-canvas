@@ -22,6 +22,7 @@ import RechargeOrderPage from "@/pages/recharge/order";
 import RechargeOrdersPage from "@/pages/recharge/orders";
 import TeamPage from "@/pages/team";
 import WalletPage from "@/pages/wallet";
+import AboutPage from "@/pages/about";
 import { AuthGuard } from "@/platform/auth/guard";
 
 export const router = createBrowserRouter([
@@ -52,6 +53,7 @@ export const router = createBrowserRouter([
             { path: "/recharge/orders", element: <RechargeOrdersPage /> },
             { path: "/recharge/orders/:orderId", element: <RechargeOrderPage /> },
             { path: "/team", element: <TeamPage /> },
+            { path: "/about", element: <AboutPage /> },
         ],
     },
     { path: "/login", element: <LoginPage /> },

@@ -92,7 +92,7 @@ function getGenerationStatus(input: SiteToolInput, canvasSnapshot?: CanvasAgentS
             const status = normalizeCanvasGenerationStatus(node.metadata?.status);
             if (!status || (nodeIds.size && !nodeIds.has(node.id))) return;
             const metadata = node.metadata || {};
-            if (!nodeIds.size && node.type !== "config" && status !== "running" && status !== "failed" && !metadata.generationMode && !metadata.generationType && !metadata.model) return;
+            if (!nodeIds.size && status !== "running" && status !== "failed" && !metadata.generationMode && !metadata.generationType && !metadata.model) return;
             tasks.push({ id: node.id, source: "canvas", status, kind: metadata.generationMode || node.type, title: node.title, prompt: compactPrompt(metadata.prompt || metadata.composerContent), projectId: canvasSnapshot.projectId, error: metadata.errorDetails });
         });
     }
@@ -292,7 +292,7 @@ async function addAsset(input: SiteToolInput) {
     if (kind === "text") {
         const content = String(input.content || "").trim();
         if (!content) throw new Error(siteText("textContentRequired"));
-        const id = store.addAsset({ kind: "text", title, coverUrl: "", tags, source, note, data: { content } });
+        const id = await store.addAsset({ kind: "text", title, coverUrl: "", tags, source, note, data: { content } });
         return { ok: true, id, kind: "text" };
     }
     if (kind === "image") {
@@ -304,7 +304,7 @@ async function addAsset(input: SiteToolInput) {
         } catch {
             throw new Error(siteText("imageReadFailed"));
         }
-        const id = store.addAsset({ kind: "image", title, coverUrl: stored.url, tags, source, note, data: { dataUrl: stored.url, storageKey: stored.storageKey, width: stored.width, height: stored.height, bytes: stored.bytes, mimeType: stored.mimeType } });
+        const id = await store.addAsset({ kind: "image", title, coverUrl: stored.url, tags, source, note, data: { dataUrl: stored.url, storageKey: stored.storageKey, width: stored.width, height: stored.height, bytes: stored.bytes, mimeType: stored.mimeType } });
         return { ok: true, id, kind: "image" };
     }
     throw new Error(siteText("assetKindUnsupported"));
